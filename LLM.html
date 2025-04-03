@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>.to/port/chat</title>
+    <link rel="stylesheet" href="css/compilemain.css" />
+    <link rel="stylesheet" href="css/header.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+    <!-- <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f0f0f0; }
+        #chat { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 10px; }
+        .message { margin-bottom: 10px; }
+        .user { color: blue; }
+        .bot { color: green; }
+        input[type="text"] { width: 80%; padding: 10px; }
+        button { padding: 10px; }
+      </style> -->
+</head>
+
+
+
+<body>
+    <header>
+        <nav class="header">
+            <a href="to.html" class="main-nav-link" id="headerLink">.to</a>
+            <p class="main-nav-link">/</p>
+            <a href="index.html" class="main-nav-link back" id="headerLink">port</a>
+            <p class="main-nav-link">/</p>
+            <a href="#" class="main-nav-link" id="headerLink">chat</a>
+        </nav>
+        <nav class="imghead" id="imghead" style="display: none;"><h1>Image</h1></nav>
+        <script src="js/Port/pheader.js"></script>
+    </header>
+    <div class="spacer" id="toppagespace"><p>Gramps</p></div>
+
+
+
+    <div class="sidebar" id="sidebar">
+        <p class="spacer">Gramps</p>
+        <div class="start">
+            <a href="#" class="linkl sidebarl large defaultopen" data-target="home">Chat</a>
+        </div>
+        <div class="upside">
+            <!-- <div class="code">
+                <a href="#" class="linkl sidebarl large" data-target="section1">PY</a>
+            </div> -->
+        </div>
+        <div class="downside">
+            <a href="index.html" class="linkl large back">Back</a>
+        </div>
+    </div>
+
+
+
+    <div class="base">
+        <section id="home" class="page">
+            <article class="">
+                <h1 class="headed">Chat with AI!</h1>
+            </article> 
+            <div class="llcontent">
+                <div id="llmessages" class="llmessages"></div>
+                <div class="llsendmsg">
+                    <input type="text" id="userInput" placeholder="Say something..." />
+                    <button id="sendBtn" class="llbtn"><i class="fa-duotone fa-solid fa-circle-arrow-right"></i>
+                </div>
+            </div>
+        </section>
+        
+
+
+    </div>
+    <div id="imgund" class="imgunderlay" style="display: none;"></div>
+    <script src="js/Port/portmain.js"></script>
+    <script src="js/LLM.js"></script>
+
+</body>
+</html>
