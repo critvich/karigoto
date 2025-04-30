@@ -55,7 +55,7 @@ async function sendMessage() {
   input.value = '';
 
   try {
-    const res = await fetch('http://10.30.35.83:8000/chat', {
+    const res = await fetch('https://10.30.35.83:8000/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message })
@@ -94,7 +94,7 @@ function clearMessages() {
 async function loadHistory() {
   console.log("loadHistory() called.");
   try {
-    const res = await fetch('http://10.30.35.83:8000/history');
+    const res = await fetch('https://10.30.35.83:8000/history');
     const history = await res.json();
     console.log("Loaded history:", history);
 
