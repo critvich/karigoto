@@ -526,6 +526,9 @@ ul li {
   width: 100%;
   margin-top: 1rem;
 }
+.llmessage {
+  font-size: 1.8rem;
+}
 
 #userInput {
   flex: 1;
@@ -533,7 +536,7 @@ ul li {
   border-radius: 1.25rem;
   border: none;
   outline: none;
-  font-size: 1rem;
+  font-size: 1.8rem;
   background-color: #2d223d;
   color: white;
 }
@@ -549,7 +552,7 @@ ul li {
   padding: 0;
   display: flex;
   align-items: center;
-  font-size: 2rem;
+  font-size: 3rem;
   color: #E691AB; /* or whatever accent color you want */
   transition: transform 0.2s ease;
 }
