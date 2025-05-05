@@ -24,7 +24,7 @@ body {
   left: 0;
   height: 100vh;
   width: 8.5%;
-  transition: width 0.5s;
+  transition: width 0.5s, box-shadow 0.5s;
   background-color: #1A0D27;
   color: #E691AB;
   padding: 20px;
@@ -36,6 +36,7 @@ body {
 }
 .sidebar:hover {
   width: 13.5%;
+  box-shadow: 0px 0px 20px 0px rgba(0, 0, 0, 0.9);
 }
 .sidebar::after {
   content: "";
@@ -84,6 +85,7 @@ body {
 }
 .topping {
   margin-bottom: 3%;
+  width: 100%;
 }
 .content {
   background-color: #23182e;
@@ -398,14 +400,14 @@ tr:hover {
 /*---------------------- Scrollbar ----------------------*/
 
 ::-webkit-scrollbar-track {
-  background-color: #1e231e;
+  background-color: #150A1F;
 }
 ::-webkit-scrollbar-thumb {
-  background-color: #242924;
-  border-radius: 10px;
+  background-color: #E6969B;
+  border-radius: 100px;
 }
 ::-webkit-scrollbar {
-  width: 10px;
+  width: 3px;
 }
 
 /*---------------------- Video ----------------------*/
