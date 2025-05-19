@@ -31,7 +31,7 @@
   text-decoration: none;
   color: #E691AB;
   font-weight: 500;
-  font-size: 2.8rem;
+  font-size: 2.575vh;
 }
 
 .main-nav-link:link,
@@ -40,12 +40,13 @@
     text-decoration: none;
     color: #E691AB;
     font-weight: 500;
-    font-size: 2.8rem;
+    font-size: 2.575vh;
 }
 
 .main-nav-link:hover,
 .main-nav-link:active {
-    color: #E59A8B
+    color: #E59A8B;
+    text-shadow: 0px 0px 5px rgba(229, 154, 139, 0.9);
 }
 
 .spacer {
@@ -53,7 +54,7 @@
 }
 
 .smallspacer {
-  height: 2.9rem;
+  height: 2.65vh;
   padding-top: 2.9rem;
   width: 2.9rem;
 }
