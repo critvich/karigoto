@@ -2,35 +2,29 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Page Transition with Blur</title>
+  <title>Multi-Page Slide System</title>
   <style>
     body {
       margin: 0;
-      font-family: sans-serif;
-      background: #111;
-      color: white;
       overflow: hidden;
+      font-family: sans-serif;
+    }
+
+    .container {
+      position: relative;
+      width: 100%;
+      height: 100vh;
     }
 
     .page {
       position: absolute;
       top: 0;
-      left: 0;
       width: 100%;
       height: 100%;
-      padding: 40px;
-      box-sizing: border-box;
-      opacity: 1;
-      backdrop-filter: blur(0px);
-      transition: 
-        opacity 0.3s ease,
-        backdrop-filter 0.3s ease;
-    }
-
-    .pagehidden {
-      opacity: 0;
-      pointer-events: none;
-      backdrop-filter: blur(10px);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      transition: transform 0.5s ease;
     }
 
     .nav {
@@ -52,39 +46,44 @@
     .nav button:hover {
       background: #444;
     }
+
+    #page0 { background: #1a1a1a; }
+    #page1 { background: #333; }
+    #page2 { background: #555; }
   </style>
 </head>
 <body>
 
 <div class="nav">
-  <button onclick="switchPage('page1', 'page2')">Go to Page 2</button>
-  <button onclick="switchPage('page2', 'page1')">Go to Page 1</button>
+  <button onclick="goToPage(0)">Page 1</button>
+  <button onclick="goToPage(1)">Page 2</button>
+  <button onclick="goToPage(2)">Page 3</button>
 </div>
 
-<div id="page1" class="page">
-  <h1>Page One</h1>
-  <p>This is the first page. Click the button to switch pages.</p>
-</div>
-
-<div id="page2" class="page pagehidden">
-  <h1>Page Two</h1>
-  <p>This is the second page. Notice the blur effect when transitioning.</p>
+<div class="container" id="container">
+  <section id="page0" class="page"><h1>Page 1</h1></section>
+  <section id="page1" class="page"><h1>Page 2</h1></section>
+  <section id="page2" class="page"><h1>Page 3</h1></section>
 </div>
 
 <script>
-function switchPage(currentId, targetId) {
-  const current = document.getElementById(currentId);
-  const target = document.getElementById(targetId);
+const pages = document.querySelectorAll('.page');
+let currentPage = 0;
 
-  current.classList.add('pagehidden');
-  setTimeout(() => {
-    current.style.display = 'none';
-    target.style.display = 'block';
-    requestAnimationFrame(() => {
-      target.classList.remove('pagehidden');
-    });
-  }, 300); // Match transition duration
+function updateTransforms() {
+  pages.forEach((page, index) => {
+    const offset = index - currentPage;
+    page.style.transform = `translateX(${offset * 100}%)`;
+  });
 }
+
+function goToPage(index) {
+  currentPage = index;
+  updateTransforms();
+}
+
+// Set initial positions
+updateTransforms();
 </script>
 
 </body>

@@ -1,41 +1,65 @@
 
 document.addEventListener("DOMContentLoaded", function() {
-    const sidebarLinks = document.querySelectorAll('.sidebarl');
-    sidebarLinks.forEach(link => {
-        link.addEventListener('click', function(event) {
-            console.log("harry")
-            event.preventDefault(); 
-            const targetId = this.getAttribute('data-target');
-            const targetSection = document.getElementById(targetId);
-            if (targetSection) {
+    // const sidebarLinks = document.querySelectorAll('.sidebarl');
+    // sidebarLinks.forEach(link => {
+    //     link.addEventListener('click', function(event) {
+    //         console.log("harry")
+    //         event.preventDefault(); 
+    //         const targetId = this.getAttribute('data-target');
+    //         const targetSection = document.getElementById(targetId);
+    //         if (targetSection) {
 
-                const sections = document.querySelectorAll('.base section');
-                sections.forEach(section => {
-                    section.classList.remove('none');
-                    section.classList.add('pagehidden');
-                });
-                console.log("sextopia")
+    //             const sections = document.querySelectorAll('.base section');
+    //             sections.forEach(section => {
+    //                 section.classList.remove('none');
+    //                 section.classList.add('pagehidden');
+    //             });
+    //             console.log("sextopia")
   
-                targetSection.classList.remove('pagehidden');
-                targetSection.classList.add('page')
-                window.location.hash = targetId;
+    //             targetSection.classList.remove('pagehidden');
+    //             targetSection.classList.add('slider')
+    //             window.location.hash = targetId;
 
-            }
+    //         }
+    //     });
+    // });
+    // const hash = window.location.hash.substring(1); 
+    // if (hash) {
+    //     const targetLink = document.querySelector(`.sidebarl[data-target="${hash}"]`);
+    //     console.log(targetLink)
+    //     if (targetLink) {
+    //         targetLink.click();
+    //     }
+    // } else {
+    //     const defaultLink = document.querySelector('.sidebarl.defaultopen');
+    //     if (defaultLink) {
+    //         defaultLink.click();
+    //     }
+    // }
+
+    const pages = document.querySelectorAll('.slider');
+    let currentPage = 0;
+
+    function updateTransforms() {
+        pages.forEach((page, index) => {
+            const offset = index - currentPage;
+            page.style.transform = `translateX(${offset * 100}%)`;
         });
-    });
-    const hash = window.location.hash.substring(1); 
-    if (hash) {
-        const targetLink = document.querySelector(`.sidebarl[data-target="${hash}"]`);
-        console.log(targetLink)
-        if (targetLink) {
-            targetLink.click();
-        }
-    } else {
-        const defaultLink = document.querySelector('.sidebarl.defaultopen');
-        if (defaultLink) {
-            defaultLink.click();
-        }
     }
+
+    document.querySelectorAll('.sidebarl').forEach(link => {
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          const targetIndex = parseInt(link.getAttribute('data-target'), 10);
+          if (!isNaN(targetIndex)) {
+            currentPage = targetIndex;
+            updateTransforms();
+          }
+        });
+      });
+
+    updateTransforms();
+
 
 
     var copyElements = document.querySelectorAll(".copytext");
