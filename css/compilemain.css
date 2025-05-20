@@ -70,10 +70,15 @@ body {
 /*---------------------- Body ----------------------*/
 
 .base {
+  opacity: 0;
+  transition: opacity 2s ease-in;
+}
+.base.ready {
   padding: 20px;
   display: flex;
   justify-content: center;
   height: 90.4vh;
+  opacity: 1;
 }
 .slider {
   position: absolute;
@@ -219,10 +224,10 @@ body {
 }
 .fs {
   max-width: 69%;
-  max-height: 80%;
+  max-height: 90%;
   position: fixed;
   left: 50%;
-  top: 50%;
+  top: 46.5%;
   transform: translate(-50%, -41%); 
   z-index: 19;
   padding: 20px;

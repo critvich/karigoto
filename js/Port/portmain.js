@@ -23,19 +23,8 @@ document.addEventListener("DOMContentLoaded", function() {
     //         }
     //     });
     // });
-    // const hash = window.location.hash.substring(1); 
-    // if (hash) {
-    //     const targetLink = document.querySelector(`.sidebarl[data-target="${hash}"]`);
-    //     console.log(targetLink)
-    //     if (targetLink) {
-    //         targetLink.click();
-    //     }
-    // } else {
-    //     const defaultLink = document.querySelector('.sidebarl.defaultopen');
-    //     if (defaultLink) {
-    //         defaultLink.click();
-    //     }
-    // }
+
+
 
     const pages = document.querySelectorAll('.slider');
     let currentPage = 0;
@@ -60,7 +49,24 @@ document.addEventListener("DOMContentLoaded", function() {
 
     updateTransforms();
 
+    const hash = window.location.hash.substring(1); 
+    if (hash) {
+        const targetLink = document.querySelector(`.sidebarl[data-target="${hash}"]`);
+        console.log(targetLink)
+        if (targetLink) {
+            targetLink.click();
+        }
+    } 
 
+    window.addEventListener('load', () => {
+        if (window.location.hash) {
+          history.replaceState(null, null, ' ');
+        }
+      });
+
+    requestAnimationFrame(() => {
+        document.querySelector('.base').classList.add('ready');
+    });
 
     var copyElements = document.querySelectorAll(".copytext");
     copyElements.forEach(function(element) {

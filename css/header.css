@@ -19,20 +19,20 @@
 
 
 
-.main-nav-list {
+/* .main-nav-list {
     list-style: none;
     display: flex;
     align-items: center;
-    /* gap: 4.8rem; */
-}
+    gap: 4.8rem; 
+}*/
   
-.main-nav-link {
+.main-nav-slash {
   display: inline-block;
   text-decoration: none;
   color: #E691AB;
   font-weight: 500;
   font-size: 2.575vh;
-}
+} 
 
 .main-nav-link:link,
 .main-nav-link:visited {
