@@ -43,9 +43,9 @@
             <a href="#" class="linkl sidebarl large defaultopen" data-target="0">Chat</a>
         </div>
         <div class="upside">
-            <div><a href="#" class="linkl sidebarl large" data-target="1">RAG</a></div>
-            <div><a href="#" class="linkl sidebarl large" data-target="2">STT</a></div>
-            <div><a href="#" class="linkl sidebarl large" data-target="3">VLM</a></div>
+            <div><a href="#" class="linkl sidebarl large" data-target="1">STT</a></div>
+            <div><a href="#" class="linkl sidebarl large" data-target="2">VLM</a></div>
+            <div><a href="#" class="linkl sidebarl large" data-target="3">RAG</a></div>
             <div><a href="#" class="linkl sidebarl large" data-target="4">LLM</a></div>
             <div><a href="#" class="linkl sidebarl large" data-target="5">TTS</a></div>
         </div>
@@ -72,11 +72,13 @@
         
         <div id="section1" class="slider"><section class="page">
             <article class="">
-                <h1 class="headed">RAG</h1>
+                <h1 class="headed">STT</h1>
             </article> 
             <div class="content">
-                <p class="seconded">Retrieval Augmented Generation</p>
-                <p class="medium">Coming soon <i class="fa-duotone fa-solid fa-screwdriver-wrench"></i></p>
+                <p class="seconded">Speech to Text</p>
+                <p class="medium">For <a href="https://huggingface.co/docs/transformers/en/model_doc/speech_to_text" target="_blank" class="linkl">STT</a> I'm using <a href="https://github.com/KoljaB/RealtimeSTT/blob/master/example_browserclient/index.html" class="linkl" target="_blank">RealtimeSTT</a><br>
+                Upon starting the code, the model will always be listening to you and logging what it hears<br>
+                The log is then handled by the <a href="#" class="linkl sidebarl" data-target="3">RAG</a></p>
                 <div class="smallspacer"></div>
             </div>
             <div class="smallspacer"></div>
@@ -84,11 +86,14 @@
         
         <div id="section2" class="slider"><section class="page">
             <article class="">
-                <h1 class="headed">STT</h1>
+                <h1 class="headed">VLM</h1>
             </article> 
             <div class="content">
-                <p class="seconded">Speech to Text</p>
-                <p class="medium">Coming soon <i class="fa-duotone fa-solid fa-screwdriver-wrench"></i></p>
+                <p class="seconded">Vision Language Model</p>
+                <p class="medium">
+                    For vision the model I'm using is <a href="https://mistral.ai/news/pixtral-12b?utm_source=tldrai" target="_blank" class="linkl">Pixtral 12b</a><br>
+                    I am grabbing a snippet of my screen, Downsizing it to 768x432, then feeding it to the model<br>
+                    The model's output is then sent directly to the <a href="#" class="linkl sidebarl" data-target="3">RAG</a></p>
                 <div class="smallspacer"></div>
             </div>
             <div class="smallspacer"></div>
@@ -96,12 +101,12 @@
         
         <div id="section3" class="slider"><section class="page">
             <article class="">
-                <h1 class="headed">VLM</h1>
+                <h1 class="headed">RAG</h1>
             </article> 
             <div class="content">
-                <p class="seconded">Vision Language Model</p>
-                <p class="medium">
-                    For vision I am using <a href="https://mistral.ai/news/pixtral-12b?utm_source=tldrai" class="linkl">Pixtral 12b</a></p>
+                <p class="seconded">Retrieval Augmented Generation</p>
+                <p class="medium">Right now my use of a <a href="https://huggingface.co/docs/transformers/en/model_doc/rag" target="_blank" class="linkl">RAG</a> is certainly not the most complex design but it is all I needed<br>
+                    Right now I am simply pulling chat logs, <a href="#" class="linkl sidebarl" data-target="2">VLM</a> data, and the <a href="#" class="linkl sidebarl" data-target="1">STT</a> input for the <a href="#" class="linkl sidebarl" data-target="4">LLM</a> to respond to</p>
                 <div class="smallspacer"></div>
             </div>
             <div class="smallspacer"></div>
@@ -116,7 +121,7 @@
                 <p class="medium">
                 When it comes to my current system I am using <a href="https://huggingface.co/deepseek-ai/deepseek-llm-7b-chat" class="linkl">Deepseek chat 7B</a><br>
                 It is a model from late 2023 that still performs decently well, and responded well to <a href="https://github.com/dair-ai/Prompt-Engineering-Guide" class="linkl">prompt engineering</a><br>
-                I currently have opted to go without a <a href="https://huggingface.co/docs/diffusers/en/training/lora" class="linkl">LoRA</a> for sake of completing this project on time, so I am fully relying on my <a href="https://huggingface.co/docs/transformers/en/model_doc/rag" class="linkl">RAG</a> for the formatting of the outputs</p>
+                I currently have opted to go without a <a href="https://huggingface.co/docs/diffusers/en/training/lora" class="linkl">LoRA</a> for sake of completing this project on time, so I am fully relying on my <a href="#" class="linkl sidebarl" data-target="3">RAG</a> for the formatting of the outputs</p>
                 <div class="smallspacer"></div>
             </div>
             <div class="smallspacer"></div>

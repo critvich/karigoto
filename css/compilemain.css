@@ -191,7 +191,8 @@ body {
   font-size: 4.225vh;
   display: flex;
   justify-content: center;
-  margin-bottom: 2.35vh;
+  margin: 2.35vh 0vh;
+
 }
 .seconded {
   font-size: 2.575vh;
