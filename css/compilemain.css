@@ -265,6 +265,7 @@ body {
   transition: border-radius 0.2s ease;
   display: flex;
   flex-direction: column;
+  margin-top: 1.1vh;
 }
 .cropboxwide:hover {
   border-radius: 1.3rem;
