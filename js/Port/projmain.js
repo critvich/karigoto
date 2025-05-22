@@ -35,6 +35,7 @@ document.addEventListener("DOMContentLoaded", function() {
             const offset = index - currentPage;
             page.style.transform = `translateX(${offset * 100}%)`;
         });
+        window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
     document.querySelectorAll('.sidebarl').forEach(link => {
@@ -72,9 +73,13 @@ document.addEventListener("DOMContentLoaded", function() {
 
     var copyElements = document.querySelectorAll(".copytext");
     copyElements.forEach(function(element) {
-        element.addEventListener("click", function() {
+        element.addEventListener("click", function(event) {
+            event.preventDefault();
+            var textToCopy = this.getAttribute("data-target");
+            if (!textToCopy) return;
+    
             var textarea = document.createElement("textarea");
-            textarea.value = this.innerText;
+            textarea.value = textToCopy;
             document.body.appendChild(textarea);
             textarea.select();
             try {
@@ -90,6 +95,7 @@ document.addEventListener("DOMContentLoaded", function() {
             }
         });
     });
+    
 
 
 
