@@ -1,32 +1,4 @@
-
 document.addEventListener("DOMContentLoaded", function() {
-    // const sidebarLinks = document.querySelectorAll('.sidebarl');
-    // sidebarLinks.forEach(link => {
-    //     link.addEventListener('click', function(event) {
-    //         console.log("harry")
-    //         event.preventDefault(); 
-    //         const targetId = this.getAttribute('data-target');
-    //         const targetSection = document.getElementById(targetId);
-    //         if (targetSection) {
-
-    //             const sections = document.querySelectorAll('.base section');
-    //             sections.forEach(section => {
-    //                 section.classList.remove('none');
-    //                 section.classList.add('pagehidden');
-    //             });
-    //             console.log("sextopia")
-  
-    //             targetSection.classList.remove('pagehidden');
-    //             targetSection.classList.add('page')
-    //         }
-    //     });
-    // });
-
-    // const defaultLink = document.querySelector('.sidebarl.defaultopen');
-    // if (defaultLink) {
-    //     defaultLink.click();
-    // }
-
     const pages = document.querySelectorAll('.slider');
     let currentPage = 0;
 
@@ -40,53 +12,47 @@ document.addEventListener("DOMContentLoaded", function() {
 
     document.querySelectorAll('.sidebarl').forEach(link => {
         link.addEventListener('click', (e) => {
-          e.preventDefault();
-          const targetIndex = parseInt(link.getAttribute('data-target'), 10);
-          if (!isNaN(targetIndex)) {
-            currentPage = targetIndex;
-            updateTransforms();
-          }
+            e.preventDefault();
+            const targetIndex = parseInt(link.getAttribute('data-target'), 10);
+            if (!isNaN(targetIndex)) {
+                currentPage = targetIndex;
+                updateTransforms();
+            }
         });
-      });
+    });
 
     updateTransforms();
-    
-    // const hash = window.location.hash.substring(1); 
-    // if (hash) {
-    //     const targetLink = document.querySelector(`.sidebarl[data-target="${hash}"]`);
-    //     console.log(targetLink)
-    //     if (targetLink) {
-    //         targetLink.click();
-    //     }
-    // } 
 
     window.addEventListener('load', () => {
         if (window.location.hash) {
-          history.replaceState(null, null, ' ');
+            history.replaceState(null, null, ' ');
         }
-      });
-
-    requestAnimationFrame(() => {
-        document.querySelector('.base').classList.add('ready');
     });
 
+    requestAnimationFrame(() => {
+        const base = document.querySelector('.base');
+        if (base) {
+            base.classList.add('ready');
+        }
+    });
 
-    var copyElements = document.querySelectorAll(".copytext");
+    const copyElements = document.querySelectorAll(".copytext");
     copyElements.forEach(function(element) {
         element.addEventListener("click", function(event) {
             event.preventDefault();
-            var textToCopy = this.getAttribute("data-target");
+            const textToCopy = this.getAttribute("data-target");
             if (!textToCopy) return;
-    
-            var textarea = document.createElement("textarea");
+
+            const textarea = document.createElement("textarea");
             textarea.value = textToCopy;
             document.body.appendChild(textarea);
             textarea.select();
+
             try {
                 document.execCommand("copy");
-                this.style.backgroundColor = "#131A23"; 
+                this.style.backgroundColor = "#131A23";
                 setTimeout(() => {
-                    this.style.backgroundColor = ""; 
+                    this.style.backgroundColor = "";
                 }, 200);
             } catch (err) {
                 console.error("Failed to copy text: ", err);
@@ -95,117 +61,198 @@ document.addEventListener("DOMContentLoaded", function() {
             }
         });
     });
-    
-
-
 
     const fullscreenimage = document.querySelectorAll('.imgfs');
-    const imhead = document.getElementById('imghead')
-    
+    const imhead = document.getElementById('imghead');
+
     fullscreenimage.forEach(image => {
-      image.addEventListener('click', () => {
+        image.addEventListener('click', () => {
+            const duplicate = image.cloneNode(true);
+            const underlay = document.getElementById('imgund');
 
-        const duplicate = image.cloneNode(true);
-        const underlay = document.getElementById('imgund')
+            duplicate.classList.add('fs');
+            duplicate.classList.remove('images');
 
-        duplicate.classList.add('fs');
-        duplicate.classList.remove('images');
+            document.body.appendChild(duplicate);
 
-        document.body.appendChild(duplicate);
-        document.getElementById('imgund').style.display = 'block';
+            if (underlay) {
+                underlay.style.display = 'block';
+            }
 
-        duplicate.addEventListener('click', () => {
-          document.body.removeChild(duplicate);
-          document.getElementById('imgund').style.display = 'none';
-          imhead.style.display = 'none'        
-        });
-        underlay.addEventListener('click', () => {
-            document.body.removeChild(duplicate);
-            document.getElementById('imgund').style.display = 'none';
-            imhead.style.display = 'none'      
-          });
-      });
-    });
+            duplicate.addEventListener('click', () => {
+                document.body.removeChild(duplicate);
+                if (underlay) underlay.style.display = 'none';
+                if (imhead) imhead.style.display = 'none';
+            });
 
-
-
-    const expandbutton = document.querySelectorAll('.expand');
-    expandbutton.forEach(link => {
-        link.addEventListener('click', function(event) {
-            event.preventDefault(); // Prevent default anchor behavior
-            const targetId = this.getAttribute('data-target');
-            const targetSection = document.getElementById(targetId);
-            if (targetSection) {
-                targetSection.classList.toggle('expanded');
-            };
-            const ionIcon = this.querySelector('ion-icon');
-            if (ionIcon.getAttribute('name') === 'chevron-down-outline') {
-                console.log('The ion-icon is a chevron down outline!');
-                ionIcon.setAttribute('name', 'chevron-up-outline');
-            } else {
-                ionIcon.setAttribute('name', 'chevron-down-outline')
-            };
-            console.log("pee")
+            if (underlay) {
+                underlay.addEventListener('click', () => {
+                    if (document.body.contains(duplicate)) {
+                        document.body.removeChild(duplicate);
+                    }
+                    underlay.style.display = 'none';
+                    if (imhead) imhead.style.display = 'none';
+                }, { once: true });
+            }
         });
     });
 
-    var player = videojs('my-video', {
-        autoplay: true,
-        loop: true,
-        muted: true, // Ensures autoplay works on all browsers
-      });
-      
+    // =========================
+    // Parts area
+    // =========================
+
+    const WORKER_BASE = "https://swpartfetch.bbourne1104.workers.dev";
+    const partsList = document.getElementById("parts-list");
+    const addPartRowButton = document.getElementById("add-part-row");
+
+    async function fetchPart(partNumber) {
+        const apiUrl = `${WORKER_BASE}/?part=${encodeURIComponent(partNumber)}`;
+        const response = await fetch(apiUrl);
+
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+
+        return await response.json();
+    }
+
+    function renderPart(resultEl, part) {
+        resultEl.innerHTML = `
+            ${part.imageUrl ? `<img src="${part.imageUrl}" alt="${part.name || "Part image"}" class="part-image">` : ""}
+            <h2 class="seconded">${part.name || "Unknown part"}</h2>
+            <p class="medium"><strong>Part #:</strong> ${part.partNumber || "N/A"}</p>
+            <p class="medium">
+                <a href="${part.sourceUrl}" target="_blank" rel="noopener noreferrer">View source page</a>
+            </p>
+        `;
+    }
+
+    function getAllPartValues() {
+        return Array.from(document.querySelectorAll(".part-input"))
+            .map(input => input.value.trim())
+            .filter(Boolean);
+    }
+
+    function updatePartsInUrl() {
+        const values = getAllPartValues();
+        const url = new URL(window.location.href);
+
+        if (values.length > 0) {
+            url.searchParams.set("parts", values.join(","));
+        } else {
+            url.searchParams.delete("parts");
+        }
+
+        history.replaceState({}, "", url.toString());
+    }
+
+    async function loadPartIntoRow(partNumber, resultEl) {
+        resultEl.innerHTML = `<p class="medium">Loading part...</p>`;
+
+        try {
+            const part = await fetchPart(partNumber);
+            renderPart(resultEl, part);
+        } catch (error) {
+            console.error(error);
+            resultEl.innerHTML = `<p class="medium">Failed to load part data.</p>`;
+        }
+    }
+
+    function createPartRow(initialValue = "") {
+        if (!partsList) return null;
+
+        const row = document.createElement("div");
+        row.className = "content part-row";
+
+        row.innerHTML = `
+            <div class="part-row-controls">
+                <input
+                    type="text"
+                    class="part-input"
+                    placeholder="Enter Steelwrist part number"
+                    value="${initialValue}"
+                >
+                <button type="button" class="part-load-btn">Load</button>
+                <button type="button" class="part-remove-btn">Remove</button>
+            </div>
+            <div class="smallspacer"></div>
+            <div class="part-result">
+                <p class="medium">Enter a part number and click Load.</p>
+            </div>
+        `;
+
+        const input = row.querySelector(".part-input");
+        const loadBtn = row.querySelector(".part-load-btn");
+        const removeBtn = row.querySelector(".part-remove-btn");
+        const resultEl = row.querySelector(".part-result");
+
+        async function loadCurrentRow() {
+            const value = input.value.trim().toUpperCase();
+
+            if (!value) {
+                resultEl.innerHTML = `<p class="medium">Please enter a part number.</p>`;
+                updatePartsInUrl();
+                return;
+            }
+
+            await loadPartIntoRow(value, resultEl);
+            updatePartsInUrl();
+        }
+
+        loadBtn.addEventListener("click", loadCurrentRow);
+
+        input.addEventListener("keydown", function(event) {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                loadCurrentRow();
+            }
+        });
+
+        input.addEventListener("change", updatePartsInUrl);
+
+        removeBtn.addEventListener("click", function() {
+            row.remove();
+            updatePartsInUrl();
+        });
+
+        partsList.appendChild(row);
+        return { row, input, loadCurrentRow };
+    }
+
+    function loadRowsFromUrl() {
+        const url = new URL(window.location.href);
+        const partsParam = url.searchParams.get("parts");
+
+        if (!partsParam) {
+            createPartRow();
+            return;
+        }
+
+        const partValues = partsParam
+            .split(",")
+            .map(value => value.trim())
+            .filter(Boolean);
+
+        if (partValues.length === 0) {
+            createPartRow();
+            return;
+        }
+
+        partValues.forEach(value => {
+            const rowObj = createPartRow(value);
+            if (rowObj) {
+                rowObj.loadCurrentRow();
+            }
+        });
+    }
+
+    if (addPartRowButton) {
+        addPartRowButton.addEventListener("click", function() {
+            createPartRow();
+        });
+    }
+
+    if (partsList) {
+        loadRowsFromUrl();
+    }
 });
-
-
-
-
-// function openTtab(evt, tabName) {
-//     var i, ttabcontent, trainingtabs;
-//     ttabcontent = document.getElementsByClassName("ttabcontent");
-//     for (i = 0; i < ttabcontent.length; i++) {
-//         ttabcontent[i].style.display = "none";
-//     }
-//     trainingtabs = document.getElementsByClassName("ttabs");
-//     for (i = 0; i < trainingtabs.length; i++) {
-//         trainingtabs[i].className = trainingtabs[i].className.replace(" active", "");
-//     }
-//     document.getElementById(tabName).style.display = "block";
-//     evt.currentTarget.className += " active";
-// }
-
-// function openRtab(evt, tabName) {
-//     var i, rtabcontent, runningtabs;
-//     rtabcontent = document.getElementsByClassName("rtabcontent");
-//     for (i = 0; i < rtabcontent.length; i++) {
-//         rtabcontent[i].style.display = "none";
-//     }
-//     runningtabs = document.getElementsByClassName("rtabs");
-//     for (i = 0; i < runningtabs.length; i++) {
-//         runningtabs[i].className = runningtabs[i].className.replace(" active", "");
-//     }
-//     document.getElementById(tabName).style.display = "block";
-//     evt.currentTarget.className += " active";
-// }
-
-
-// var fsund = document.querySelectorAll(".imgfs");
-// fsund.forEach(function(element) {
-//     var fsund = document.getElementById('imgund');
-//     element.addEventListener("click", function() {
-//         this.classList.toggle('fs');
-//         if (this.classList.contains('images')) { 
-//             this.classList.remove('images'); 
-//             this.classList.add('placeholder'); 
-//         } else if (this.classList.contains('placeholder')) {
-//             this.classList.remove('placeholder'); 
-//             this.classList.add('images'); 
-//         }
-//         if (fsund.style.display === 'none') {
-//             fsund.style.display = 'block';
-//         } else {
-//             fsund.style.display = 'none';
-//         }
-//     });
-
-// });
