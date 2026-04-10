@@ -137,6 +137,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
         const qrCode = new QRCodeLib(qrContainer, {
             text: currentUrl,
+            typeNumber: 0,
             width: 900,
             height: 900,
             colorDark: "#000000",
