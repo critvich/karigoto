@@ -142,7 +142,7 @@ document.addEventListener("DOMContentLoaded", function() {
             height: 900,
             colorDark: "#000000",
             colorLight: "#ffffff",
-            correctLevel: QRCodeLib.CorrectLevel.H
+            correctLevel: QRCodeLib.CorrectLevel.L
         });
 
         await new Promise(resolve => requestAnimationFrame(resolve));
