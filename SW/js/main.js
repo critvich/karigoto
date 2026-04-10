@@ -62,39 +62,43 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     });
 
-    const fullscreenimage = document.querySelectorAll('.imgfs');
     const imhead = document.getElementById('imghead');
+    
+    function openFullscreenImage(image) {
+        const duplicate = image.cloneNode(true);
+        const underlay = document.getElementById('imgund');
 
-    fullscreenimage.forEach(image => {
-        image.addEventListener('click', () => {
-            const duplicate = image.cloneNode(true);
-            const underlay = document.getElementById('imgund');
+        duplicate.classList.add('fs');
+        duplicate.classList.remove('images');
 
-            duplicate.classList.add('fs');
-            duplicate.classList.remove('images');
+        document.body.appendChild(duplicate);
 
-            document.body.appendChild(duplicate);
+        if (underlay) {
+            underlay.style.display = 'block';
+        }
 
-            if (underlay) {
-                underlay.style.display = 'block';
-            }
-
-            duplicate.addEventListener('click', () => {
-                document.body.removeChild(duplicate);
-                if (underlay) underlay.style.display = 'none';
-                if (imhead) imhead.style.display = 'none';
-            });
-
-            if (underlay) {
-                underlay.addEventListener('click', () => {
-                    if (document.body.contains(duplicate)) {
-                        document.body.removeChild(duplicate);
-                    }
-                    underlay.style.display = 'none';
-                    if (imhead) imhead.style.display = 'none';
-                }, { once: true });
-            }
+        duplicate.addEventListener('click', () => {
+            document.body.removeChild(duplicate);
+            if (underlay) underlay.style.display = 'none';
+            if (imhead) imhead.style.display = 'none';
         });
+
+        if (underlay) {
+            underlay.addEventListener('click', () => {
+                if (document.body.contains(duplicate)) {
+                    document.body.removeChild(duplicate);
+                }
+                underlay.style.display = 'none';
+                if (imhead) imhead.style.display = 'none';
+            }, { once: true });
+        }
+    }
+
+    document.addEventListener('click', function(event) {
+        const image = event.target.closest('.imgfs');
+        if (!image) return;
+
+        openFullscreenImage(image);
     });
 
     // =========================
@@ -118,7 +122,11 @@ document.addEventListener("DOMContentLoaded", function() {
 
     function renderPart(resultEl, part) {
         resultEl.innerHTML = `
-            ${part.imageUrl ? `<img src="${part.imageUrl}" alt="${part.name || "Part image"}" class="part-image">` : ""}
+            ${part.imageUrl ? `
+                <div class="cropboxwide">
+                    <img src="${part.imageUrl}" alt="${part.name || "Part image"}" class="part-image images imgfs">
+                </div>
+            ` : ""}
             <h2 class="seconded">${part.name || "Unknown part"}</h2>
             <p class="medium"><strong>Part #:</strong> ${part.partNumber || "N/A"}</p>
             <p class="medium">
