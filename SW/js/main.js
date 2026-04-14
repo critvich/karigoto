@@ -102,11 +102,43 @@ document.addEventListener("DOMContentLoaded", function() {
     // =========================
 
     const WORKER_BASE = "https://swpartfetch.bbourne1104.workers.dev";
+    const FALLBACK_IMAGE_PATTERNS = [
+        "/image/getthumbnail/1017"
+    ];
     const partsList = document.getElementById("parts-list");
     const addPartRowButton = document.getElementById("add-part-row");
     const xmlUploadInput = document.getElementById("xml-upload");
     const downloadQrPdfButton = document.getElementById("download-qr-pdf");
+    const isWorkerSearchPage = window.location.pathname.toLowerCase().includes("workersearch");
+    const WORKER_SEARCH_PASSWORD = "swparts";
+    const STOCK_DATA_URL = "data/stock-current.csv";
+    let stockRowsPromise = null;
     let currentOrderNumber = "";
+
+    function unlockWorkerSearch() {
+        if (!isWorkerSearchPage) return true;
+        if (sessionStorage.getItem("workerSearchUnlocked") === "true") return true;
+
+        const enteredPassword = prompt("Enter worker search password:");
+
+        if (enteredPassword === WORKER_SEARCH_PASSWORD) {
+            sessionStorage.setItem("workerSearchUnlocked", "true");
+            return true;
+        }
+
+        document.body.innerHTML = `
+            <main class="password-denied">
+                <h1 class="headed">Access denied</h1>
+                <p class="medium">Refresh the page to try again.</p>
+            </main>
+        `;
+
+        return false;
+    }
+
+    if (!unlockWorkerSearch()) {
+        return;
+    }
 
     async function fetchPart(partNumber) {
         const apiUrl = `${WORKER_BASE}/?part=${encodeURIComponent(partNumber)}`;
@@ -117,6 +149,108 @@ document.addEventListener("DOMContentLoaded", function() {
         }
 
         return await response.json();
+    }
+
+    function isFallbackImageUrl(imageUrl = "") {
+        return FALLBACK_IMAGE_PATTERNS.some(pattern => imageUrl.includes(pattern));
+    }
+
+    function escapeHtml(value = "") {
+        const decodedValue = String(value)
+            .replace(/&quot;|&#34;/g, '"')
+            .replace(/&#039;|&#39;|&apos;/g, "'")
+            .replace(/&amp;/g, "&");
+
+        return decodedValue
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&#34;")
+            .replaceAll("'", "&#039;");
+    }
+
+    function parseCsvLine(line) {
+        const values = [];
+        let currentValue = "";
+        let isInsideQuotes = false;
+
+        for (let index = 0; index < line.length; index += 1) {
+            const character = line[index];
+            const nextCharacter = line[index + 1];
+
+            if (character === '"' && isInsideQuotes && nextCharacter === '"') {
+                currentValue += '"';
+                index += 1;
+            } else if (character === '"') {
+                isInsideQuotes = !isInsideQuotes;
+            } else if (character === "," && !isInsideQuotes) {
+                values.push(currentValue);
+                currentValue = "";
+            } else {
+                currentValue += character;
+            }
+        }
+
+        values.push(currentValue);
+        return values;
+    }
+
+    function parseStockCsv(csvText) {
+        const lines = csvText
+            .replace(/^\uFEFF/, "")
+            .split(/\r?\n/)
+            .filter(line => line.trim());
+
+        if (lines.length < 2) return [];
+
+        const headers = parseCsvLine(lines[0]).map(header => header.trim());
+
+        return lines.slice(1).map(line => {
+            const values = parseCsvLine(line);
+            const row = headers.reduce((record, header, index) => {
+                record[header] = values[index]?.trim() || "";
+                return record;
+            }, {});
+
+            return {
+                partNumber: row["Part number"].toUpperCase(),
+                partName: row["Part name"],
+                location: row.Location,
+                balance: row.Balance
+            };
+        }).filter(row => row.partNumber);
+    }
+
+    async function fetchStockRows() {
+        if (!stockRowsPromise) {
+            stockRowsPromise = fetch(STOCK_DATA_URL)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Stock data error: ${response.status}`);
+                    }
+
+                    return response.text();
+                })
+                .then(parseStockCsv);
+        }
+
+        return stockRowsPromise;
+    }
+
+    async function fetchStockRowsForPart(partNumber) {
+        if (!isWorkerSearchPage) return [];
+
+        const normalizedPartNumber = partNumber.trim().toUpperCase();
+        let rows = [];
+
+        try {
+            rows = await fetchStockRows();
+        } catch (error) {
+            console.error(error);
+            return [];
+        }
+
+        return rows.filter(row => row.partNumber === normalizedPartNumber);
     }
 
     async function openQrPdfForCurrentLink() {
@@ -182,15 +316,63 @@ document.addEventListener("DOMContentLoaded", function() {
         }, 60000);
     }
 
-    function renderPart(resultEl, part) {
-        resultEl.innerHTML = `
-            ${part.imageUrl ? `<div class="cropboxwide"><img src="${part.imageUrl}" alt="${part.name || "Part image"}" class="part-image images imgfs"></div>` : ""}
-            <h2 class="seconded">${part.name || "Unknown part"}</h2>
-            <p class="medium"><strong>Part #:</strong> ${part.partNumber || "N/A"}</p>
-            <p class="medium">
-                <a href="${part.sourceUrl}" target="_blank" rel="noopener noreferrer">View source page</a>
-            </p>
+    function renderStockDetails(stockRows) {
+        if (!isWorkerSearchPage) return "";
+
+        if (stockRows.length === 0) {
+            return `<p class="medium"><strong>Stock:</strong> No location/balance found.</p>`;
+        }
+
+        const totalBalance = stockRows.reduce((sum, row) => {
+            const balance = Number(row.balance);
+            return Number.isFinite(balance) ? sum + balance : sum;
+        }, 0);
+
+        const stockRowsHtml = stockRows
+            .map(row => `
+                <tr>
+                    <td>${escapeHtml(row.location || "N/A")}</td>
+                    <td>${escapeHtml(row.balance ?? "N/A")}</td>
+                </tr>
+            `)
+            .join("");
+
+        return `
+            <div class="stock-details">
+                <h3 class="seconded">Stock Locations</h3>
+                <p class="medium"><strong>Total Balance:</strong> ${escapeHtml(totalBalance)}</p>
+                <table class="stock-table">
+                    <thead>
+                        <tr>
+                            <th>Location</th>
+                            <th>Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${stockRowsHtml}
+                    </tbody>
+                </table>
+            </div>
         `;
+    }
+
+    function renderPart(resultEl, part, stockRows = []) {
+        const hasRealImage = part.imageUrl && !isFallbackImageUrl(part.imageUrl);
+        const imageHtml = hasRealImage
+            ? `<div class="cropboxwide"><img src="${escapeHtml(part.imageUrl)}" alt="${escapeHtml(part.name || "Part image")}" class="part-image images imgfs"></div>`
+            : `<p class="medium">No image available</p>`;
+        const infoHtml = `
+            <div class="part-info">
+                <h2 class="seconded">${escapeHtml(part.name || "Unknown part")}</h2>
+                <p class="medium"><strong>Part #:</strong> ${escapeHtml(part.partNumber || "N/A")}</p>
+                ${renderStockDetails(stockRows)}
+                <p class="medium">
+                    <a href="${escapeHtml(part.sourceUrl)}" target="_blank" rel="noopener noreferrer" class="linkl">View portal page</a>
+                </p>
+            </div>
+        `;
+
+        resultEl.innerHTML = `<div class="part-search-layout">${imageHtml}${infoHtml}</div>`;
 
         const image = resultEl.querySelector('.imgfs');
         if (!image) return;
@@ -249,8 +431,11 @@ document.addEventListener("DOMContentLoaded", function() {
         resultEl.innerHTML = `<p class="medium">Loading part...</p>`;
 
         try {
-            const part = await fetchPart(partNumber);
-            renderPart(resultEl, part);
+            const [part, stockRows] = await Promise.all([
+                fetchPart(partNumber),
+                fetchStockRowsForPart(partNumber)
+            ]);
+            renderPart(resultEl, part, stockRows);
         } catch (error) {
             console.error(error);
             resultEl.innerHTML = `<p class="medium">Failed to load part data.</p>`;
