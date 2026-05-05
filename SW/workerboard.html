@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>.to/SW/workerboard</title>
+    <link rel="stylesheet" href="css/workerboard.css">
+</head>
+
+<body>
+    <header class="worker-header">
+        <div class="worker-brand">
+            <p class="brand-path">.to / SW / <span id="worker-code-header">BRBO</span></p>
+            <h1 id="worker-title">SW Task Board</h1>
+        </div>
+        <div class="worker-switcher">
+            <p class="switcher-label">Workers</p>
+            <div id="worker-nav" class="worker-nav"></div>
+        </div>
+        <div class="account-area">
+            <button id="account-toggle" class="account-toggle" type="button" aria-expanded="false" aria-controls="account-panel">Sign in</button>
+            <div id="account-panel" class="account-panel hidden">
+                <p id="account-summary" class="account-summary">Not signed in</p>
+                <form id="account-form" class="account-form">
+                    <label class="field">
+                        <span>Username</span>
+                        <input id="account-email" type="text" autocomplete="username" placeholder="BRBO account">
+                    </label>
+                    <label class="field">
+                        <span>Password</span>
+                        <input id="account-password" type="password" autocomplete="current-password" placeholder="Password">
+                    </label>
+                    <div class="inline-actions">
+                        <button id="account-submit" type="submit" class="button button-primary">Sign in</button>
+                        <button id="account-signout" type="button" class="button button-secondary hidden">Sign out</button>
+                    </div>
+                    <p id="account-status" class="form-status" aria-live="polite"></p>
+                </form>
+            </div>
+        </div>
+    </header>
+
+    <main class="worker-shell">
+        <section class="current-banner">
+            <div class="banner-copy">
+                <p class="eyebrow">Current Task</p>
+                <h2 id="activity-title">Loading activity...</h2>
+                <p id="activity-detail" class="hero-detail">Pulling the current status now.</p>
+            </div>
+            <div class="banner-side">
+                <button id="activity-unpin" class="button button-danger hidden" type="button">Unpin</button>
+                <button id="activity-routine" class="button button-secondary hidden" type="button">Daily routine</button>
+                <button id="activity-lunch" class="button button-secondary hidden" type="button">I'm on lunch</button>
+                <p id="activity-updated" class="hero-meta"></p>
+            </div>
+        </section>
+
+        <section class="board-space">
+            <div class="board-heading">
+                <div>
+                    <p class="eyebrow">Board</p>
+                    <h2><span id="worker-code-feed">BRBO</span> queue</h2>
+                </div>
+                <p id="board-note" class="board-note">An empty board waiting for things to be pinned onto it.</p>
+            </div>
+
+            <div id="task-list" class="task-list board-canvas" aria-live="polite"></div>
+
+        </section>
+    </main>
+
+    <aside id="done-drawer" class="done-drawer">
+        <button id="done-toggle" class="done-toggle" type="button" aria-expanded="false" aria-controls="done-panel">
+            <span class="done-toggle-label">Done Posts</span>
+            <span class="done-toggle-meta" id="done-toggle-meta">0 today</span>
+        </button>
+        <section id="done-panel" class="done-panel">
+            <div class="board-heading board-heading-secondary">
+                <div>
+                    <p class="eyebrow">Done</p>
+                    <h2>Finished today</h2>
+                </div>
+                <p class="board-note">Completed tasks stay here until the end of the day, then move into archive.</p>
+            </div>
+            <div id="done-list" class="task-list board-canvas"></div>
+        </section>
+    </aside>
+
+    <aside id="fab-shell" class="fab-shell">
+        <button id="fab-toggle" class="fab-toggle" type="button" aria-expanded="false" aria-controls="fab-panel" aria-label="Add a task">
+            <span class="fab-icon" aria-hidden="true">+</span>
+        </button>
+
+        <div id="fab-panel" class="fab-panel">
+            <form id="task-form" class="board-form">
+                <label class="field">
+                    <span>Task type</span>
+                    <select id="preset-select" required></select>
+                </label>
+
+                <div id="extra-fields" class="extra-fields"></div>
+
+                <label class="field">
+                    <span>Posted by</span>
+                    <input id="task-author" type="text" maxlength="32" placeholder="Anonymous is fine">
+                </label>
+
+                <button type="submit" class="button button-primary">Post task</button>
+                <button id="fab-back" class="fab-back button button-secondary" type="button">Back</button>
+                <p id="submit-status" class="form-status" aria-live="polite"></p>
+            </form>
+        </div>
+    </aside>
+
+    <template id="task-card-template">
+        <article class="task-card">
+            <div class="task-topline">
+                <span class="task-pill task-type"></span>
+                <div class="task-indicator-wrap">
+                    <button type="button" class="task-indicator" aria-label="Task options">
+                        <span class="task-indicator-icon" aria-hidden="true">...</span>
+                    </button>
+                    <div class="task-menu hidden">
+                        <button type="button" class="button button-secondary task-set-doing">Mark doing</button>
+                        <button type="button" class="button button-secondary task-set-done">Mark done</button>
+                        <button type="button" class="button button-secondary task-edit">Edit task</button>
+                        <button type="button" class="button button-danger task-archive">Archive task</button>
+                        <button type="button" class="button button-danger task-delete hidden">Delete permanently</button>
+                    </div>
+                </div>
+            </div>
+            <h3 class="task-title"></h3>
+            <p class="task-detail"></p>
+            <div class="task-meta">
+                <p class="task-author"></p>
+                <p class="task-time"></p>
+            </div>
+            <form class="edit-form hidden">
+                <label class="field">
+                    <span>Edit title</span>
+                    <input class="edit-title" type="text" maxlength="80">
+                </label>
+                <label class="field">
+                    <span>Edit detail</span>
+                    <textarea class="edit-detail" rows="3" maxlength="280"></textarea>
+                </label>
+                <div class="inline-actions">
+                    <button type="submit" class="button button-primary">Save</button>
+                    <button type="button" class="button button-secondary edit-cancel">Cancel</button>
+                </div>
+            </form>
+        </article>
+    </template>
+
+    <script src="js/workerboard-config.js"></script>
+    <script type="module" src="js/workerboard.js"></script>
+</body>
+
+</html>

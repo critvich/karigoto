@@ -1,0 +1,3 @@
+ALTER TABLE tasks ADD COLUMN done_at TEXT;
+ALTER TABLE tasks ADD COLUMN done_day TEXT;
+ALTER TABLE tasks ADD COLUMN archived_at TEXT;
