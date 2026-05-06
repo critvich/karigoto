@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SW TV Display</title>
+    <link rel="stylesheet" href="css/tvdisplay.css">
+</head>
+
+<body class="display-body">
+    <main id="display-root" class="display-root" data-theme="day">
+        <section class="display-hero promo-hero">
+            <div id="promo-media-shell" class="promo-media-shell">
+                <img id="promo-image" alt="Promotional media">
+                <video id="promo-video" muted autoplay loop playsinline></video>
+                <div id="promo-placeholder" class="promo-placeholder">
+                    <p class="display-kicker">Promotional Media</p>
+                    <h2>No media selected.</h2>
+                </div>
+            </div>
+            <aside class="promo-copy">
+                <p id="display-status-label" class="display-kicker">Steelwrist Presents</p>
+                <h1 id="display-headline">Loading promotion...</h1>
+                <p id="display-subheadline"></p>
+                <h2 id="display-announcement" class="promo-line">Welcome to the SW company display.</h2>
+            </aside>
+        </section>
+
+        <footer class="ticker-shell">
+            <p id="display-ticker"></p>
+        </footer>
+    </main>
+
+    <script src="js/tvdisplay-config.js"></script>
+    <script type="module" src="js/tvdisplay.js"></script>
+</body>
+
+</html>

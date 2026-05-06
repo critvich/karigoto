@@ -23,12 +23,46 @@ export default {
         return login(request, env);
       }
 
+      if (path === "/api/display-login" && request.method === "POST") {
+        return displayLogin(request, env);
+      }
+
       if (path === "/api/logout" && request.method === "POST") {
         return logout(request, env);
       }
 
       if (path === "/api/session" && request.method === "GET") {
         return getSession(request, env);
+      }
+
+      if (path === "/api/display" && request.method === "GET") {
+        return getDisplayState(env);
+      }
+
+      if (path === "/api/display" && request.method === "PATCH") {
+        return updateDisplayState(request, env);
+      }
+
+      if (path === "/api/display/media" && request.method === "GET") {
+        return listMediaAssets(env);
+      }
+
+      if (path === "/api/display/media/link" && request.method === "POST") {
+        return createLinkedMediaAsset(request, env);
+      }
+
+      if (path === "/api/display/media/upload" && request.method === "POST") {
+        return uploadMediaAsset(request, env, url.origin);
+      }
+
+      const mediaContentMatch = path.match(/^\/api\/display\/media\/([a-f0-9-]+)\/content$/i);
+      if (mediaContentMatch && request.method === "GET") {
+        return getMediaAssetContent(request, env, mediaContentMatch[1]);
+      }
+
+      const mediaAssetMatch = path.match(/^\/api\/display\/media\/([a-f0-9-]+)$/i);
+      if (mediaAssetMatch && request.method === "DELETE") {
+        return deleteMediaAsset(request, env, mediaAssetMatch[1]);
       }
 
       const activityMatch = path.match(/^\/api\/workers\/([A-Z0-9]{4})\/activity$/);
@@ -200,6 +234,31 @@ async function login(request, env) {
     return unauthorized("Incorrect password.");
   }
 
+  return createSession(env, user, workerCode);
+}
+
+async function displayLogin(request, env) {
+  const body = await readJson(request);
+  const password = String(body.password || "");
+  const workerCode = String(body.workerCode || "BRBO").trim().toUpperCase();
+  const user = String(env.ADMIN_USER || "display-admin").trim() || "display-admin";
+
+  if (!password) {
+    return badRequest("Password is required.");
+  }
+
+  if (!isAllowedWorker(env, workerCode)) {
+    return badRequest("Unknown worker code.");
+  }
+
+  if (password !== String(env.ADMIN_PASSWORD || "")) {
+    return unauthorized("Incorrect password.");
+  }
+
+  return createSession(env, user, workerCode);
+}
+
+async function createSession(env, user, workerCode) {
   const token = createToken();
   const tokenHash = await sha256Hex(token);
   const now = Date.now();
@@ -257,6 +316,435 @@ async function getSession(request, env) {
       workerCode: auth.session.workerCode
     }
   });
+}
+
+function getDefaultDisplayState() {
+  return {
+    headline: "",
+    subheadline: "",
+    statusLabel: "Steelwrist Presents",
+    statusValue: "",
+    metricOneLabel: "Open Tasks",
+    metricOneValue: "0",
+    metricTwoLabel: "Orders",
+    metricTwoValue: "--",
+    metricThreeLabel: "Priority",
+    metricThreeValue: "Normal",
+    announcement: "",
+    ticker: "",
+    mediaUrl: "",
+    mediaType: "image",
+    mediaAlt: "Promotional media",
+    ctaLabel: "Now Showing",
+    ctaDetail: "",
+    playlist: [],
+    slideDurationSeconds: 12,
+    theme: "day",
+    updatedBy: "",
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function rowToDisplayState(row) {
+  if (!row) {
+    return getDefaultDisplayState();
+  }
+
+  return {
+    headline: row.headline,
+    subheadline: row.subheadline,
+    statusLabel: row.status_label,
+    statusValue: row.status_value,
+    metricOneLabel: row.metric_one_label,
+    metricOneValue: row.metric_one_value,
+    metricTwoLabel: row.metric_two_label,
+    metricTwoValue: row.metric_two_value,
+    metricThreeLabel: row.metric_three_label,
+    metricThreeValue: row.metric_three_value,
+    announcement: row.announcement,
+    ticker: row.ticker,
+    mediaUrl: row.media_url || "",
+    mediaType: row.media_type || "image",
+    mediaAlt: row.media_alt || "",
+    ctaLabel: row.cta_label || "",
+    ctaDetail: row.cta_detail || "",
+    playlist: parsePlaylist(row.playlist_json),
+    slideDurationSeconds: Number(row.slide_duration_seconds || 12),
+    theme: row.theme,
+    updatedBy: row.updated_by,
+    updatedAt: row.updated_at
+  };
+}
+
+async function getDisplayState(env) {
+  const row = await env.boardbinding
+    .prepare(`
+      SELECT headline, subheadline, status_label, status_value,
+        metric_one_label, metric_one_value,
+        metric_two_label, metric_two_value,
+        metric_three_label, metric_three_value,
+        announcement, ticker, media_url, media_type, media_alt,
+        cta_label, cta_detail, playlist_json, slide_duration_seconds,
+        transition_style, theme, updated_by, updated_at
+      FROM tv_display_state
+      WHERE id = 'main'
+      LIMIT 1
+    `)
+    .first();
+
+  return json({ display: rowToDisplayState(row) });
+}
+
+async function updateDisplayState(request, env) {
+  const auth = await requireAuth(request, env);
+  if (!auth.ok) {
+    return auth.response;
+  }
+
+  const body = await readJson(request);
+  const current = rowToDisplayState(await env.boardbinding
+    .prepare(`
+      SELECT headline, subheadline, status_label, status_value,
+        metric_one_label, metric_one_value,
+        metric_two_label, metric_two_value,
+        metric_three_label, metric_three_value,
+        announcement, ticker, media_url, media_type, media_alt,
+        cta_label, cta_detail, playlist_json, slide_duration_seconds,
+        transition_style, theme, updated_by, updated_at
+      FROM tv_display_state
+      WHERE id = 'main'
+      LIMIT 1
+    `)
+    .first());
+
+  const next = {
+    headline: normalizeDisplayText(body.headline, current.headline, 92),
+    subheadline: normalizeDisplayText(body.subheadline, current.subheadline, 180),
+    statusLabel: normalizeDisplayText(body.statusLabel, current.statusLabel, 34),
+    statusValue: normalizeDisplayText(body.statusValue, current.statusValue, 54),
+    metricOneLabel: normalizeDisplayText(body.metricOneLabel, current.metricOneLabel, 34),
+    metricOneValue: normalizeDisplayText(body.metricOneValue, current.metricOneValue, 28),
+    metricTwoLabel: normalizeDisplayText(body.metricTwoLabel, current.metricTwoLabel, 34),
+    metricTwoValue: normalizeDisplayText(body.metricTwoValue, current.metricTwoValue, 28),
+    metricThreeLabel: normalizeDisplayText(body.metricThreeLabel, current.metricThreeLabel, 34),
+    metricThreeValue: normalizeDisplayText(body.metricThreeValue, current.metricThreeValue, 28),
+    announcement: normalizeDisplayText(body.announcement, current.announcement, 220),
+    ticker: normalizeDisplayText(body.ticker, current.ticker, 280),
+    mediaUrl: normalizeDisplayText(body.mediaUrl, current.mediaUrl, 700),
+    mediaType: normalizeMediaType(body.mediaType ?? current.mediaType),
+    mediaAlt: normalizeDisplayText(body.mediaAlt, current.mediaAlt, 140),
+    ctaLabel: normalizeDisplayText(body.ctaLabel, current.ctaLabel, 60),
+    ctaDetail: normalizeDisplayText(body.ctaDetail, current.ctaDetail, 180),
+    playlist: normalizePlaylist(body.playlist ?? current.playlist),
+    slideDurationSeconds: normalizeSlideDuration(body.slideDurationSeconds ?? current.slideDurationSeconds),
+    theme: normalizeTheme(body.theme ?? current.theme),
+    updatedBy: auth.session.user,
+    updatedAt: new Date().toISOString()
+  };
+
+  await env.boardbinding
+    .prepare(`
+      INSERT INTO tv_display_state (
+        id, headline, subheadline, status_label, status_value,
+        metric_one_label, metric_one_value, metric_two_label, metric_two_value,
+        metric_three_label, metric_three_value, announcement, ticker,
+        media_url, media_type, media_alt, cta_label, cta_detail,
+        playlist_json, slide_duration_seconds, transition_style,
+        theme, updated_by, updated_at
+      )
+      VALUES ('main', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        headline = excluded.headline,
+        subheadline = excluded.subheadline,
+        status_label = excluded.status_label,
+        status_value = excluded.status_value,
+        metric_one_label = excluded.metric_one_label,
+        metric_one_value = excluded.metric_one_value,
+        metric_two_label = excluded.metric_two_label,
+        metric_two_value = excluded.metric_two_value,
+        metric_three_label = excluded.metric_three_label,
+        metric_three_value = excluded.metric_three_value,
+        announcement = excluded.announcement,
+        ticker = excluded.ticker,
+        media_url = excluded.media_url,
+        media_type = excluded.media_type,
+        media_alt = excluded.media_alt,
+        cta_label = excluded.cta_label,
+        cta_detail = excluded.cta_detail,
+        playlist_json = excluded.playlist_json,
+        slide_duration_seconds = excluded.slide_duration_seconds,
+        transition_style = excluded.transition_style,
+        theme = excluded.theme,
+        updated_by = excluded.updated_by,
+        updated_at = excluded.updated_at
+    `)
+    .bind(
+      next.headline,
+      next.subheadline,
+      next.statusLabel,
+      next.statusValue,
+      next.metricOneLabel,
+      next.metricOneValue,
+      next.metricTwoLabel,
+      next.metricTwoValue,
+      next.metricThreeLabel,
+      next.metricThreeValue,
+      next.announcement,
+      next.ticker,
+      next.mediaUrl,
+      next.mediaType,
+      next.mediaAlt,
+      next.ctaLabel,
+      next.ctaDetail,
+      JSON.stringify(next.playlist),
+      next.slideDurationSeconds,
+      "cinematic",
+      next.theme,
+      next.updatedBy,
+      next.updatedAt
+    )
+    .run();
+
+  return json({ ok: true, display: next });
+}
+
+async function listMediaAssets(env) {
+  const { results } = await env.boardbinding
+    .prepare(`
+      SELECT id, title, media_type, source_type, url, mime_type, size_bytes, created_by, created_at
+      FROM media_assets
+      ORDER BY datetime(created_at) DESC
+    `)
+    .all();
+
+  return json({
+    assets: results.map(rowToMediaAsset)
+  });
+}
+
+async function createLinkedMediaAsset(request, env) {
+  const auth = await requireAuth(request, env);
+  if (!auth.ok) {
+    return auth.response;
+  }
+
+  const body = await readJson(request);
+  const title = normalizeDisplayText(body.title, "", 120);
+  const url = normalizeDisplayText(body.url, "", 900);
+  const mediaType = normalizeMediaType(body.mediaType);
+
+  if (!title || !url) {
+    return badRequest("Title and media URL are required.");
+  }
+
+  const asset = {
+    id: crypto.randomUUID(),
+    title,
+    mediaType,
+    sourceType: "link",
+    url,
+    mimeType: "",
+    sizeBytes: 0,
+    createdBy: auth.session.user,
+    createdAt: new Date().toISOString()
+  };
+
+  await insertMediaAsset(env, asset, "");
+  return json({ ok: true, asset }, 201);
+}
+
+async function uploadMediaAsset(request, env, origin) {
+  const auth = await requireAuth(request, env);
+  if (!auth.ok) {
+    return auth.response;
+  }
+
+  const mediaBucket = getMediaBucket(env);
+  if (!mediaBucket) {
+    return badRequest("Uploads need a Cloudflare R2 binding named MEDIA_BUCKET or bucketofun.");
+  }
+
+  const form = await request.formData();
+  const file = form.get("file");
+  if (!file || typeof file.arrayBuffer !== "function") {
+    return badRequest("Upload a media file.");
+  }
+
+  const title = normalizeDisplayText(form.get("title"), "", 120) || normalizeDisplayText(file.name, "Uploaded media", 120);
+  const mediaType = normalizeMediaType(form.get("mediaType") || inferMediaType(file.type));
+  const id = crypto.randomUUID();
+  const extension = getFileExtension(file.name, mediaType);
+  const r2Key = `display-media/${id}${extension}`;
+  const bytes = await file.arrayBuffer();
+
+  await mediaBucket.put(r2Key, bytes, {
+    httpMetadata: {
+      contentType: file.type || (mediaType === "video" ? "video/mp4" : "image/jpeg")
+    }
+  });
+
+  const asset = {
+    id,
+    title,
+    mediaType,
+    sourceType: "upload",
+    url: `${origin}/api/display/media/${id}/content`,
+    mimeType: file.type || "",
+    sizeBytes: file.size || bytes.byteLength || 0,
+    createdBy: auth.session.user,
+    createdAt: new Date().toISOString()
+  };
+
+  await insertMediaAsset(env, asset, r2Key);
+  return json({ ok: true, asset }, 201);
+}
+
+async function getMediaAssetContent(request, env, assetId) {
+  const row = await env.boardbinding
+    .prepare("SELECT r2_key, mime_type, size_bytes FROM media_assets WHERE id = ? AND source_type = 'upload' LIMIT 1")
+    .bind(assetId)
+    .first();
+
+  if (!row || !row.r2_key) {
+    return json({ error: "Media not found." }, 404);
+  }
+
+  const mediaBucket = getMediaBucket(env);
+  if (!mediaBucket) {
+    return json({ error: "Media bucket is not configured." }, 503);
+  }
+
+  const range = parseRangeHeader(request.headers.get("Range") || "", Number(row.size_bytes || 0));
+  const object = range
+    ? await mediaBucket.get(row.r2_key, { range: { offset: range.start, length: range.length } })
+    : await mediaBucket.get(row.r2_key);
+  if (!object) {
+    return json({ error: "Media file not found." }, 404);
+  }
+
+  return new Response(object.body, {
+    status: range ? 206 : 200,
+    headers: {
+      ...corsHeaders,
+      "Content-Type": object.httpMetadata?.contentType || row.mime_type || "application/octet-stream",
+      "Cache-Control": "public, max-age=86400",
+      "Accept-Ranges": "bytes",
+      ...(range
+        ? {
+            "Content-Range": `bytes ${range.start}-${range.end}/${range.total}`,
+            "Content-Length": String(range.length)
+          }
+        : {})
+    }
+  });
+}
+
+async function deleteMediaAsset(request, env, assetId) {
+  const auth = await requireAuth(request, env);
+  if (!auth.ok) {
+    return auth.response;
+  }
+
+  const row = await env.boardbinding
+    .prepare("SELECT r2_key FROM media_assets WHERE id = ? LIMIT 1")
+    .bind(assetId)
+    .first();
+
+  if (!row) {
+    return json({ error: "Media not found." }, 404);
+  }
+
+  const mediaBucket = getMediaBucket(env);
+  if (row.r2_key && mediaBucket) {
+    await mediaBucket.delete(row.r2_key);
+  }
+
+  await env.boardbinding
+    .prepare("DELETE FROM media_assets WHERE id = ?")
+    .bind(assetId)
+    .run();
+
+  return json({ ok: true });
+}
+
+async function insertMediaAsset(env, asset, r2Key) {
+  await env.boardbinding
+    .prepare(`
+      INSERT INTO media_assets (
+        id, title, media_type, source_type, url, r2_key, mime_type,
+        size_bytes, created_by, created_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    .bind(
+      asset.id,
+      asset.title,
+      asset.mediaType,
+      asset.sourceType,
+      asset.url,
+      r2Key,
+      asset.mimeType,
+      asset.sizeBytes,
+      asset.createdBy,
+      asset.createdAt
+    )
+    .run();
+}
+
+function rowToMediaAsset(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    mediaType: row.media_type,
+    sourceType: row.source_type,
+    url: row.url,
+    mimeType: row.mime_type,
+    sizeBytes: row.size_bytes,
+    createdBy: row.created_by,
+    createdAt: row.created_at
+  };
+}
+
+function getMediaBucket(env) {
+  return env.MEDIA_BUCKET || env.bucketofun || env.BUCKETOFUN || null;
+}
+
+function parseRangeHeader(header, totalSize) {
+  if (!header || !totalSize) {
+    return null;
+  }
+
+  const match = String(header).match(/^bytes=(\d*)-(\d*)$/);
+  if (!match) {
+    return null;
+  }
+
+  let start = match[1] ? Number.parseInt(match[1], 10) : 0;
+  let end = match[2] ? Number.parseInt(match[2], 10) : totalSize - 1;
+
+  if (!match[1] && match[2]) {
+    const suffixLength = Number.parseInt(match[2], 10);
+    start = Math.max(totalSize - suffixLength, 0);
+    end = totalSize - 1;
+  }
+
+  if (
+    Number.isNaN(start) ||
+    Number.isNaN(end) ||
+    start < 0 ||
+    end < start ||
+    start >= totalSize
+  ) {
+    return null;
+  }
+
+  end = Math.min(end, totalSize - 1);
+  return {
+    start,
+    end,
+    total: totalSize,
+    length: end - start + 1
+  };
 }
 
 async function getActivity(env, workerCode) {
@@ -575,6 +1063,103 @@ function normalizeStatus(value) {
     return status;
   }
   return "open";
+}
+
+function normalizeDisplayText(value, fallback, maxLength) {
+  if (value === undefined || value === null) {
+    return String(fallback || "").trim();
+  }
+
+  return String(value || "").trim().slice(0, maxLength);
+}
+
+function normalizeTheme(value) {
+  const theme = String(value || "day").trim().toLowerCase();
+  if (["day", "night", "alert"].includes(theme)) {
+    return theme;
+  }
+
+  return "day";
+}
+
+function normalizeMediaType(value) {
+  const mediaType = String(value || "image").trim().toLowerCase();
+  if (["image", "video"].includes(mediaType)) {
+    return mediaType;
+  }
+
+  return "image";
+}
+
+function normalizePlaylist(value) {
+  const items = Array.isArray(value) ? value : [];
+  return items
+    .map(item => ({
+      id: normalizeDisplayText(item?.id, "", 80),
+      title: normalizeDisplayText(item?.title, "", 120),
+      mediaType: normalizeMediaType(item?.mediaType),
+      url: normalizeDisplayText(item?.url, "", 900),
+      durationSeconds: normalizeSlideDuration(item?.durationSeconds || 0, true),
+      layoutMode: normalizeLayoutMode(item?.layoutMode),
+      statusLabel: normalizeDisplayText(item?.statusLabel, "", 34),
+      headline: normalizeDisplayText(item?.headline, "", 92),
+      subheadline: normalizeDisplayText(item?.subheadline, "", 180),
+      announcement: normalizeDisplayText(item?.announcement, "", 220)
+    }))
+    .filter(item => item.id && item.url)
+    .slice(0, 30);
+}
+
+function normalizeSlideDuration(value, allowZero = false) {
+  const duration = Number.parseInt(value, 10);
+  if (allowZero && duration === 0) {
+    return 0;
+  }
+
+  if (Number.isNaN(duration)) {
+    return 12;
+  }
+
+  return Math.max(3, Math.min(duration, 300));
+}
+
+function normalizeTransitionStyle(value) {
+  const transitionStyle = String(value || "fade").trim().toLowerCase();
+  if (["fade", "cut"].includes(transitionStyle)) {
+    return transitionStyle;
+  }
+
+  return "fade";
+}
+
+function normalizeLayoutMode(value) {
+  const layoutMode = String(value || "split").trim().toLowerCase();
+  if (["fullscreen", "fullscreen-text", "split"].includes(layoutMode)) {
+    return layoutMode;
+  }
+
+  return "split";
+}
+
+function parsePlaylist(value) {
+  try {
+    return normalizePlaylist(JSON.parse(value || "[]"));
+  } catch {
+    return [];
+  }
+}
+
+function inferMediaType(mimeType) {
+  return String(mimeType || "").toLowerCase().startsWith("video/") ? "video" : "image";
+}
+
+function getFileExtension(fileName, mediaType) {
+  const match = String(fileName || "").match(/\.[a-z0-9]{2,8}$/i);
+  if (match) {
+    return match[0].toLowerCase();
+  }
+
+  return mediaType === "video" ? ".mp4" : ".jpg";
 }
 
 async function cleanupWorkerState(env, workerCode) {

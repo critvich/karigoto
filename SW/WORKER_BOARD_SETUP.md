@@ -39,3 +39,32 @@ The page navigation will automatically show the new worker code.
 ## Firebase note
 
 When you are ready for live shared data, set `storageMode` to `firebase` and fill in the Firebase config fields in `SW/js/workerboard-config.js`.
+
+## TV display
+
+The company TV screen is:
+
+- `SW/tvdisplay.html`
+
+The admin dashboard is:
+
+- `SW/tvadmin.html`
+
+The dashboard signs in with the existing Cloudflare Worker admin credentials. It uses the password field on the page and sends the configured admin username from `SW/js/tvdisplay-config.js`.
+
+Apply `SW/cloudflare/display-schema.sql` to the D1 database, or re-run `SW/cloudflare/board-schema.sql`, before publishing the Worker update.
+
+If you already created the first display table before the promotional media fields were added, run `SW/cloudflare/display-promo-migration.sql` once on the same D1 database. If you already ran that promotional migration and only need the media browser/playlist additions, run `SW/cloudflare/display-library-migration.sql` once.
+
+The display is built for promotional media. The admin dashboard can upload media, link existing media, curate the loop order, set slide durations, publish promo copy, set CTA text, choose ticker text, and select a display theme.
+
+Uploads require a Cloudflare R2 bucket binding named `MEDIA_BUCKET` on the Worker. Linked media works without R2.
+
+The Worker exposes:
+
+- `GET /api/display` for the TV screen
+- `PATCH /api/display` for the signed-in admin dashboard
+- `GET /api/display/media` for the shared media browser
+- `POST /api/display/media/link` for linked media
+- `POST /api/display/media/upload` for R2-backed uploads
+- `GET /api/display/media/{id}/content` for uploaded media playback
