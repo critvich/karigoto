@@ -134,15 +134,15 @@ body {
 }
 
 .display-root.is-transitioning .display-hero::after {
-    animation: slide-wash 900ms cubic-bezier(0.2, 0.7, 0.2, 1);
+    animation: slide-wash 520ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 .display-root.is-transitioning .promo-media-shell {
-    animation: media-arrive 780ms cubic-bezier(0.2, 0.7, 0.2, 1);
+    animation: media-arrive 420ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 .display-root.is-transitioning .promo-copy {
-    animation: copy-arrive 860ms cubic-bezier(0.2, 0.7, 0.2, 1);
+    animation: copy-arrive 460ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 .display-hero,
@@ -171,15 +171,11 @@ body {
 
 @keyframes media-arrive {
     0% {
-        opacity: 0.2;
-        transform: scale(1.018);
-        filter: saturate(0.7) brightness(0.82);
+        opacity: 0.42;
     }
 
     100% {
         opacity: 1;
-        transform: scale(1);
-        filter: saturate(1) brightness(1);
     }
 }
 

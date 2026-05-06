@@ -12,6 +12,7 @@ const config = {
 
 const DISPLAY_KEY = "sw-tv-display:state";
 const REFRESH_MS = 8000;
+const BACKGROUND_FRAME_MS = 100;
 
 const defaultDisplay = {
     headline: "",
@@ -53,11 +54,24 @@ const playerState = {
     index: 0,
     timer: null,
     renderedItemKey: "",
-    playlistKey: ""
+    playlistKey: "",
+    lastBackgroundFrame: 0
 };
 
 function animateBackground() {
-    const time = performance.now() / 1000;
+    if (elements.root.classList.contains("is-transitioning")) {
+        window.requestAnimationFrame(animateBackground);
+        return;
+    }
+
+    const now = performance.now();
+    if (now - playerState.lastBackgroundFrame < BACKGROUND_FRAME_MS) {
+        window.requestAnimationFrame(animateBackground);
+        return;
+    }
+    playerState.lastBackgroundFrame = now;
+
+    const time = now / 1000;
     const spotA = getRoamingPoint(time, 0.12, 0.17, 0);
     const spotB = getRoamingPoint(time, 0.15, 0.11, 1.7);
     const spotC = getRoamingPoint(time, 0.1, 0.19, 3.2);
@@ -254,6 +268,9 @@ function runSlideTransition(item) {
     elements.root.classList.remove("is-transitioning");
     void elements.root.offsetWidth;
     elements.root.classList.add("is-transitioning");
+    window.setTimeout(() => {
+        elements.root.classList.remove("is-transitioning");
+    }, 560);
 }
 
 function applyMedia(item, mediaUrl, isVideo) {
