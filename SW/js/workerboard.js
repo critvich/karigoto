@@ -332,6 +332,7 @@ function renderExtraFields(selectedOption, preservedValues = {}) {
 
         input.dataset.extraFieldId = field.id;
         input.dataset.extraFieldLabel = field.label;
+        input.dataset.extraFieldDefault = field.defaultValue || "";
         input.value = preservedValues[field.id] || field.defaultValue || "";
         input.addEventListener("change", () => {
             const nextValues = {
@@ -359,6 +360,21 @@ function collectExtraFieldLines() {
 function getTaskDetailLines() {
     return collectExtraFieldLines()
         .filter(line => !line.startsWith("Priority:"));
+}
+
+function hasMeaningfulTaskDetail() {
+    return Array.from(elements.extraFields.querySelectorAll("[data-extra-field-id]"))
+        .some(input => {
+            const value = escapeText(input.value);
+            const defaultValue = escapeText(input.dataset.extraFieldDefault);
+            const label = input.dataset.extraFieldLabel || "";
+
+            if (!value || label === "Priority") {
+                return false;
+            }
+
+            return value !== defaultValue;
+        });
 }
 
 function getExtraFieldValue(fieldId) {
@@ -977,7 +993,7 @@ async function init() {
             const title = buildTaskTitle();
 
             const detailLines = getTaskDetailLines();
-            if (detailLines.length === 0) {
+            if (!hasMeaningfulTaskDetail()) {
                 setStatusMessage(elements.submitStatus, "Add at least one ticket detail before posting.", true);
                 return;
             }
