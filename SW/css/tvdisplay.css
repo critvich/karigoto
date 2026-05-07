@@ -145,6 +145,27 @@ body {
     animation: copy-arrive 460ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
+.display-root[data-performance="medium"]::before {
+    filter: none;
+    opacity: 0.62;
+}
+
+.display-root[data-performance="medium"]::after,
+.display-root[data-performance="medium"] .display-hero::after {
+    content: none;
+}
+
+.display-root[data-performance="low"]::before,
+.display-root[data-performance="low"]::after,
+.display-root[data-performance="low"] .display-hero::after {
+    content: none;
+}
+
+.display-root[data-performance="low"].is-transitioning .promo-media-shell,
+.display-root[data-performance="low"].is-transitioning .promo-copy {
+    animation: none;
+}
+
 .display-hero,
 .ticker-shell,
 .admin-header,
@@ -317,6 +338,21 @@ body {
         right bottom,
         var(--copy-cutout-w, 0px) calc(100% - var(--copy-cutout-h, 0px));
     mask-repeat: no-repeat;
+}
+
+.display-root[data-performance="low"][data-layout="fullscreen-text"].has-slide-copy .promo-media-shell img,
+.display-root[data-performance="low"][data-layout="fullscreen-text"].has-slide-copy .promo-media-shell video {
+    -webkit-mask: none;
+    mask: none;
+    clip-path: polygon(
+        0 0,
+        100% 0,
+        100% 100%,
+        var(--copy-cutout-w, 0px) 100%,
+        var(--copy-cutout-w, 0px) calc(100% - var(--copy-cutout-h, 0px)),
+        0 calc(100% - var(--copy-cutout-h, 0px)),
+        0 0
+    );
 }
 
 .display-root[data-layout="fullscreen-text"] .promo-copy {

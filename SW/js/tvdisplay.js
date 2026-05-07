@@ -12,7 +12,12 @@ const config = {
 
 const DISPLAY_KEY = "sw-tv-display:state";
 const REFRESH_MS = 8000;
-const BACKGROUND_FRAME_MS = 100;
+const BACKGROUND_FRAME_MS = {
+    high: 100,
+    medium: 180,
+    low: 360
+};
+const PERFORMANCE_PROBE_FRAMES = 24;
 
 const defaultDisplay = {
     headline: "",
@@ -55,17 +60,22 @@ const playerState = {
     timer: null,
     renderedItemKey: "",
     playlistKey: "",
-    lastBackgroundFrame: 0
+    lastBackgroundFrame: 0,
+    performanceMode: "high"
 };
 
 function animateBackground() {
+    if (playerState.performanceMode === "low") {
+        return;
+    }
+
     if (elements.root.classList.contains("is-transitioning")) {
         window.requestAnimationFrame(animateBackground);
         return;
     }
 
     const now = performance.now();
-    if (now - playerState.lastBackgroundFrame < BACKGROUND_FRAME_MS) {
+    if (now - playerState.lastBackgroundFrame < getBackgroundFrameMs()) {
         window.requestAnimationFrame(animateBackground);
         return;
     }
@@ -104,6 +114,43 @@ function animateBackground() {
     elements.root.style.setProperty("--bg-rotate-b", `${rotateB.toFixed(2)}deg`);
 
     window.requestAnimationFrame(animateBackground);
+}
+
+function getBackgroundFrameMs() {
+    return BACKGROUND_FRAME_MS[playerState.performanceMode] || BACKGROUND_FRAME_MS.high;
+}
+
+function runPerformanceProbe() {
+    const samples = [];
+    let previous = performance.now();
+
+    function sample(now) {
+        samples.push(now - previous);
+        previous = now;
+
+        if (samples.length < PERFORMANCE_PROBE_FRAMES) {
+            window.requestAnimationFrame(sample);
+            return;
+        }
+
+        const average = samples.reduce((total, value) => total + value, 0) / samples.length;
+        const worst = Math.max(...samples);
+        let mode = "high";
+        if (average > 30 || worst > 85) {
+            mode = "low";
+        } else if (average > 21 || worst > 48) {
+            mode = "medium";
+        }
+
+        playerState.performanceMode = mode;
+        elements.root.dataset.performance = mode;
+        if (mode === "low") {
+            elements.root.classList.remove("is-transitioning");
+        }
+    }
+
+    elements.root.dataset.performance = "testing";
+    window.requestAnimationFrame(sample);
 }
 
 function getRoamingPoint(time, speedX, speedY, offset) {
@@ -395,5 +442,6 @@ document.fonts?.ready?.then(updateMediaCutout).catch(() => undefined);
 
 render(readLocalDisplay());
 refresh();
+runPerformanceProbe();
 animateBackground();
 window.setInterval(refresh, REFRESH_MS);
