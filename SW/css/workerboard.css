@@ -229,6 +229,12 @@ body {
 #activity-unpin {
     position: absolute;
     top: 2.2rem;
+    right: 13.6rem;
+}
+
+#activity-complete {
+    position: absolute;
+    top: 2.2rem;
     right: 2.2rem;
 }
 
@@ -383,6 +389,11 @@ body {
     padding: 0.55rem 1rem;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.08);
+}
+
+.task-number {
+    color: var(--text);
+    background: rgba(102, 240, 198, 0.12);
 }
 
 .badge.subtle {
@@ -566,6 +577,14 @@ body.is-showing-done .done-drawer {
 
 .task-detail {
     white-space: pre-line;
+}
+
+.task-detail a,
+.hero-detail a {
+    color: var(--accent-strong);
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+    overflow-wrap: anywhere;
 }
 
 .task-meta {

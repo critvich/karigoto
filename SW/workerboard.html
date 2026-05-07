@@ -4,7 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>.to/SW/workerboard</title>
+    <title>Worker Board</title>
+    <link rel="icon" type="image/png" href="media/images/blue%20logo.png">
     <link rel="stylesheet" href="css/workerboard.css">
 </head>
 
@@ -50,6 +51,7 @@
             </div>
             <div class="banner-side">
                 <button id="activity-unpin" class="button button-danger hidden" type="button">Unpin</button>
+                <button id="activity-complete" class="button button-primary hidden" type="button">Complete</button>
                 <button id="activity-routine" class="button button-secondary hidden" type="button">Daily routine</button>
                 <button id="activity-lunch" class="button button-secondary hidden" type="button">I'm on lunch</button>
                 <p id="activity-updated" class="hero-meta"></p>
@@ -117,6 +119,7 @@
         <article class="task-card">
             <div class="task-topline">
                 <span class="task-pill task-type"></span>
+                <span class="task-pill task-number"></span>
                 <div class="task-indicator-wrap">
                     <button type="button" class="task-indicator" aria-label="Task options">
                         <span class="task-indicator-icon" aria-hidden="true">...</span>

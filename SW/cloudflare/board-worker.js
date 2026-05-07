@@ -897,6 +897,9 @@ async function createTask(request, env, workerCode) {
   if (!preset || !title) {
     return badRequest("Task type and title are required.");
   }
+  if (!detail) {
+    return badRequest("Add at least one ticket detail before posting.");
+  }
 
   const now = new Date().toISOString();
   const id = crypto.randomUUID();

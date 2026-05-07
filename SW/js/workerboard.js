@@ -24,6 +24,7 @@ const elements = {
     accountSignout: document.getElementById("account-signout"),
     accountStatus: document.getElementById("account-status"),
     activityUnpin: document.getElementById("activity-unpin"),
+    activityComplete: document.getElementById("activity-complete"),
     activityRoutine: document.getElementById("activity-routine"),
     activityLunch: document.getElementById("activity-lunch"),
     activityTitle: document.getElementById("activity-title"),
@@ -70,6 +71,39 @@ function escapeText(value) {
     return String(value || "").trim();
 }
 
+function renderLinkedText(element, value) {
+    const text = String(value || "");
+    const urlPattern = /\bhttps?:\/\/[^\s<>"']+|\bwww\.[^\s<>"']+/gi;
+    let cursor = 0;
+    element.replaceChildren();
+
+    text.replace(urlPattern, (match, offset) => {
+        if (offset > cursor) {
+            element.appendChild(document.createTextNode(text.slice(cursor, offset)));
+        }
+
+        const trailing = match.match(/[),.;:!?]+$/)?.[0] || "";
+        const urlText = trailing ? match.slice(0, -trailing.length) : match;
+        const link = document.createElement("a");
+        link.href = urlText.startsWith("www.") ? `https://${urlText}` : urlText;
+        link.textContent = urlText;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        element.appendChild(link);
+
+        if (trailing) {
+            element.appendChild(document.createTextNode(trailing));
+        }
+
+        cursor = offset + match.length;
+        return match;
+    });
+
+    if (cursor < text.length) {
+        element.appendChild(document.createTextNode(text.slice(cursor)));
+    }
+}
+
 function formatTimestamp(value) {
     if (!value) return "";
     const date = value instanceof Date ? value : new Date(value);
@@ -79,6 +113,69 @@ function formatTimestamp(value) {
         dateStyle: "medium",
         timeStyle: "short"
     }).format(date);
+}
+
+function getTaskDateParts(value) {
+    if (!value) return null;
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+
+    return {
+        year: date.getFullYear(),
+        month: date.getMonth() + 1,
+        day: date.getDate(),
+        timestamp: date.getTime()
+    };
+}
+
+function padTaskNumber(value) {
+    return String(value).padStart(2, "0");
+}
+
+function buildTaskNumberMap(tasks) {
+    const datedTasks = tasks
+        .map((task, fallbackIndex) => ({
+            task,
+            fallbackIndex,
+            parts: getTaskDateParts(task.createdAt)
+        }))
+        .filter(entry => entry.parts);
+    const datesByDay = new Map();
+    const tasksByDate = new Map();
+    const numbers = new Map();
+
+    datedTasks.forEach(entry => {
+        const dayKey = padTaskNumber(entry.parts.day);
+        const monthKey = `${entry.parts.year}-${padTaskNumber(entry.parts.month)}`;
+        const dateKey = `${monthKey}-${dayKey}`;
+
+        if (!datesByDay.has(dayKey)) {
+            datesByDay.set(dayKey, new Set());
+        }
+        datesByDay.get(dayKey).add(monthKey);
+
+        if (!tasksByDate.has(dateKey)) {
+            tasksByDate.set(dateKey, []);
+        }
+        tasksByDate.get(dateKey).push(entry);
+    });
+
+    tasksByDate.forEach((entries, dateKey) => {
+        const [, month, day] = dateKey.split("-");
+        const shouldShowMonth = (datesByDay.get(day)?.size || 0) > 1;
+
+        entries
+            .sort((a, b) => a.parts.timestamp - b.parts.timestamp || a.fallbackIndex - b.fallbackIndex)
+            .forEach((entry, index) => {
+                const sequence = padTaskNumber(index + 1);
+                const label = shouldShowMonth
+                    ? `${month}/${day}-${sequence}`
+                    : `${day}-${sequence}`;
+                numbers.set(String(entry.task.id), label);
+            });
+    });
+
+    return numbers;
 }
 
 function setStatusMessage(element, message, isError = false) {
@@ -259,6 +356,11 @@ function collectExtraFieldLines() {
         .filter(Boolean);
 }
 
+function getTaskDetailLines() {
+    return collectExtraFieldLines()
+        .filter(line => !line.startsWith("Priority:"));
+}
+
 function getExtraFieldValue(fieldId) {
     const input = elements.extraFields.querySelector(`[data-extra-field-id="${fieldId}"]`);
     return input ? escapeText(input.value) : "";
@@ -279,17 +381,22 @@ function renderActivity() {
     const isOnLunch = activity.title === "__LUNCH__";
     const isDailyRoutine = activity.title === "Daily routine";
     const canUnpinActivity = Boolean(state.user && (currentTask || isOnLunch || isDailyRoutine));
+    const canCompleteActivity = Boolean(state.user && currentTask);
 
     elements.activityTitle.textContent = isOnLunch
         ? "On lunch"
         : (activity.title || `No current ${state.workerCode} activity set`);
-    elements.activityDetail.textContent = isOnLunch
-        ? (activity.detail || `${state.workerCode} is on lunch right now.`)
-        : (activity.detail || "There is no live activity note posted yet.");
+    renderLinkedText(
+        elements.activityDetail,
+        isOnLunch
+            ? (activity.detail || `${state.workerCode} is on lunch right now.`)
+            : (activity.detail || "There is no live activity note posted yet.")
+    );
     elements.activityUpdated.textContent = state.user
         ? ""
         : (activity.updatedAt ? `Updated ${formatTimestamp(activity.updatedAt)}` : "");
     elements.activityUnpin.classList.toggle("hidden", !canUnpinActivity);
+    elements.activityComplete.classList.toggle("hidden", !canCompleteActivity);
     elements.activityRoutine.classList.toggle("hidden", !state.user);
     elements.activityLunch.classList.toggle("hidden", !state.user);
     elements.activityLunch.textContent = "I'm on lunch";
@@ -314,14 +421,15 @@ function renderAccountState() {
 function renderTasks(provider) {
     const activeTasks = state.tasks.filter(task => !["done", "archived"].includes(task.status));
     const doneTasks = state.tasks.filter(task => task.status === "done");
+    const taskNumbers = buildTaskNumberMap(state.tasks);
 
     elements.boardNote.classList.toggle("hidden", activeTasks.length > 0);
 
-    renderTaskGroup(elements.taskList, activeTasks, provider, `The ${state.workerCode} board is empty right now. Hit the plus button and pin the first task.`);
+    renderTaskGroup(elements.taskList, activeTasks, provider, taskNumbers, `The ${state.workerCode} board is empty right now. Hit the plus button and pin the first task.`);
     elements.doneToggleMeta.textContent = `${doneTasks.length} today`;
 
     if (doneTasks.length > 0) {
-        renderTaskGroup(elements.doneList, doneTasks, provider);
+        renderTaskGroup(elements.doneList, doneTasks, provider, taskNumbers);
     } else {
         elements.doneList.innerHTML = "";
         elements.doneList.appendChild(createEmptyState("No finished posts yet today."));
@@ -331,7 +439,7 @@ function renderTasks(provider) {
     }
 }
 
-function renderTaskGroup(target, tasks, provider, emptyMessage = "") {
+function renderTaskGroup(target, tasks, provider, taskNumbers, emptyMessage = "") {
     target.innerHTML = "";
     if (tasks.length === 0) {
         if (emptyMessage) {
@@ -341,11 +449,11 @@ function renderTaskGroup(target, tasks, provider, emptyMessage = "") {
     }
 
     tasks.forEach(task => {
-        target.appendChild(createTaskNode(task, provider));
+        target.appendChild(createTaskNode(task, provider, taskNumbers.get(String(task.id)) || ""));
     });
 }
 
-function createTaskNode(task, provider) {
+function createTaskNode(task, provider, taskNumber) {
     const node = elements.taskTemplate.content.firstElementChild.cloneNode(true);
     const options = state.workerConfig.presetOptions || [];
     const presetLabel = options.find(option => option.id === task.preset)?.label || "Task";
@@ -358,8 +466,9 @@ function createTaskNode(task, provider) {
     node.dataset.manageable = canManage ? "true" : "false";
     node.dataset.status = task.status || "open";
     node.querySelector(".task-type").textContent = presetLabel;
+    node.querySelector(".task-number").textContent = taskNumber;
     node.querySelector(".task-title").textContent = task.title;
-    node.querySelector(".task-detail").textContent = task.detail || "";
+    renderLinkedText(node.querySelector(".task-detail"), task.detail || "");
     node.querySelector(".task-author").textContent = task.author ? `Posted by ${task.author}` : "Posted anonymously";
     node.querySelector(".task-time").textContent = formatTimestamp(task.createdAt);
 
@@ -867,13 +976,17 @@ async function init() {
         try {
             const title = buildTaskTitle();
 
+            const detailLines = getTaskDetailLines();
+            if (detailLines.length === 0) {
+                setStatusMessage(elements.submitStatus, "Add at least one ticket detail before posting.", true);
+                return;
+            }
+
             await provider.addTask({
                 preset: elements.presetSelect.value,
                 title,
                 priority: getExtraFieldValue("priority") || "Medium",
-                detail: collectExtraFieldLines()
-                    .filter(line => !line.startsWith("Priority:"))
-                    .join("\n"),
+                detail: detailLines.join("\n"),
                 author: escapeText(elements.taskAuthor.value)
             });
 
@@ -945,6 +1058,19 @@ async function init() {
                 }, { suppressRefresh: true });
             }
             await provider.refresh();
+        } catch (error) {
+            window.alert(error.message);
+        }
+    });
+
+    elements.activityComplete.addEventListener("click", async () => {
+        const currentTask = state.tasks.find(task => task.status === "doing");
+        if (!currentTask) {
+            return;
+        }
+
+        try {
+            await provider.updateTask(currentTask.id, { status: "done" });
         } catch (error) {
             window.alert(error.message);
         }
