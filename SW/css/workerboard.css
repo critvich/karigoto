@@ -74,6 +74,13 @@ body {
     align-self: start;
 }
 
+.account-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.8rem;
+}
+
 .worker-brand {
     min-width: 0;
 }
@@ -103,7 +110,9 @@ body {
     position: absolute;
     top: calc(100% + 1rem);
     right: 0;
-    width: min(34rem, calc(100vw - 3rem));
+    width: min(48rem, calc(100vw - 3rem));
+    max-height: calc(100vh - 12rem);
+    overflow: auto;
     padding: 1.8rem;
     border-radius: 1.8rem;
     border: 1px solid var(--line);
@@ -115,6 +124,80 @@ body {
 .account-form {
     display: grid;
     gap: 1.2rem;
+}
+
+.account-request-form,
+.account-admin-panel {
+    margin-top: 0;
+}
+
+.account-section-title {
+    color: var(--accent-strong);
+    font-size: 1.35rem;
+    letter-spacing: 0.14rem;
+    text-transform: uppercase;
+}
+
+.account-admin-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.2rem;
+}
+
+.account-admin-list {
+    display: grid;
+    gap: 0.9rem;
+}
+
+.account-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 1rem;
+    align-items: center;
+    padding: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 1.2rem;
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.account-row[data-status="pending"] {
+    border-color: rgba(102, 240, 198, 0.22);
+}
+
+.account-row[data-status="rejected"] {
+    opacity: 0.72;
+}
+
+.account-code {
+    font-family: "Tourney", sans-serif;
+    font-size: 2rem;
+    line-height: 1;
+}
+
+.account-meta {
+    margin-top: 0.4rem;
+    color: var(--muted);
+    font-size: 1.25rem;
+}
+
+.account-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    justify-content: flex-end;
+}
+
+.account-actions .button {
+    padding: 0.75rem 1rem;
+    font-size: 1.25rem;
+}
+
+.account-empty-state {
+    min-width: 0;
+    min-height: 8rem;
+    font-size: 1.35rem;
 }
 
 .account-summary {
@@ -785,9 +868,21 @@ body.is-showing-done .done-drawer {
         margin-left: 0;
     }
 
+    .account-toolbar {
+        max-width: min(38rem, calc(100vw - 2rem));
+    }
+
     .account-panel {
         right: 0;
         left: auto;
+    }
+
+    .account-row {
+        grid-template-columns: 1fr;
+    }
+
+    .account-actions {
+        justify-content: flex-start;
     }
 
     .worker-shell {

@@ -15,6 +15,8 @@ const elements = {
     workerNav: document.getElementById("worker-nav"),
     workerCodeFeed: document.getElementById("worker-code-feed"),
     accountToggle: document.getElementById("account-toggle"),
+    accountRequestToggle: document.getElementById("account-request-toggle"),
+    accountAdminToggle: document.getElementById("account-admin-toggle"),
     accountPanel: document.getElementById("account-panel"),
     accountSummary: document.getElementById("account-summary"),
     accountForm: document.getElementById("account-form"),
@@ -23,6 +25,14 @@ const elements = {
     accountSubmit: document.getElementById("account-submit"),
     accountSignout: document.getElementById("account-signout"),
     accountStatus: document.getElementById("account-status"),
+    accountRequestForm: document.getElementById("account-request-form"),
+    requestCode: document.getElementById("request-code"),
+    requestPassword: document.getElementById("request-password"),
+    requestStatus: document.getElementById("request-status"),
+    accountAdminPanel: document.getElementById("account-admin-panel"),
+    accountAdminRefresh: document.getElementById("account-admin-refresh"),
+    accountAdminList: document.getElementById("account-admin-list"),
+    accountAdminStatus: document.getElementById("account-admin-status"),
     activityUnpin: document.getElementById("activity-unpin"),
     activityComplete: document.getElementById("activity-complete"),
     activityRoutine: document.getElementById("activity-routine"),
@@ -56,6 +66,8 @@ const state = {
     tasks: [],
     activity: null,
     user: null,
+    accounts: [],
+    accountPanelMode: "signin",
     showingDone: false
 };
 
@@ -69,6 +81,10 @@ function getWorkerCodeFromUrl() {
 
 function escapeText(value) {
     return String(value || "").trim();
+}
+
+function normalizeAccountCode(value) {
+    return escapeText(value).toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4);
 }
 
 function renderLinkedText(element, value) {
@@ -112,6 +128,19 @@ function formatTimestamp(value) {
     return new Intl.DateTimeFormat("en-US", {
         dateStyle: "medium",
         timeStyle: "short"
+    }).format(date);
+}
+
+function formatShortTimestamp(value) {
+    if (!value) return "";
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+
+    return new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit"
     }).format(date);
 }
 
@@ -190,9 +219,33 @@ function createEmptyState(message) {
     return empty;
 }
 
-function setAccountPanelOpen(isOpen) {
+function createInlineEmptyState(message) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state account-empty-state";
+    empty.textContent = message;
+    return empty;
+}
+
+function setAccountPanelMode(mode) {
+    state.accountPanelMode = mode;
+    elements.accountForm.classList.toggle("hidden", mode !== "signin");
+    elements.accountRequestForm.classList.toggle("hidden", mode !== "request");
+    elements.accountAdminPanel.classList.toggle("hidden", mode !== "admin" || !state.user?.isAdmin);
+    if (!state.user) {
+        elements.accountSummary.textContent = mode === "request"
+            ? "Request access with your 4 letter code."
+            : "Sign in to manage tasks and activity.";
+    }
+}
+
+function setAccountPanelOpen(isOpen, mode = state.accountPanelMode) {
+    if (isOpen) {
+        setAccountPanelMode(mode);
+    }
     elements.accountPanel.classList.toggle("hidden", !isOpen);
-    elements.accountToggle.setAttribute("aria-expanded", String(isOpen));
+    elements.accountToggle.setAttribute("aria-expanded", String(isOpen && mode === "signin"));
+    elements.accountRequestToggle.setAttribute("aria-expanded", String(isOpen && mode === "request"));
+    elements.accountAdminToggle.setAttribute("aria-expanded", String(isOpen && mode === "admin"));
 }
 
 function setFabOpen(isOpen) {
@@ -396,8 +449,9 @@ function renderActivity() {
     const currentTask = state.tasks.find(task => task.status === "doing");
     const isOnLunch = activity.title === "__LUNCH__";
     const isDailyRoutine = activity.title === "Daily routine";
-    const canUnpinActivity = Boolean(state.user && (currentTask || isOnLunch || isDailyRoutine));
-    const canCompleteActivity = Boolean(state.user && currentTask);
+    const canManage = canManageCurrentBoard();
+    const canUnpinActivity = Boolean(canManage && (currentTask || isOnLunch || isDailyRoutine));
+    const canCompleteActivity = Boolean(canManage && currentTask);
 
     elements.activityTitle.textContent = isOnLunch
         ? "On lunch"
@@ -413,25 +467,117 @@ function renderActivity() {
         : (activity.updatedAt ? `Updated ${formatTimestamp(activity.updatedAt)}` : "");
     elements.activityUnpin.classList.toggle("hidden", !canUnpinActivity);
     elements.activityComplete.classList.toggle("hidden", !canCompleteActivity);
-    elements.activityRoutine.classList.toggle("hidden", !state.user);
-    elements.activityLunch.classList.toggle("hidden", !state.user);
+    elements.activityRoutine.classList.toggle("hidden", !canManage);
+    elements.activityLunch.classList.toggle("hidden", !canManage);
     elements.activityLunch.textContent = "I'm on lunch";
     elements.activityLunch.classList.remove("button-danger");
     elements.activityLunch.classList.add("button-secondary");
 }
 
+function canManageCurrentBoard() {
+    return Boolean(state.user?.isAdmin || state.user?.workerCode === state.workerCode);
+}
+
 function renderAccountState() {
     const signedIn = Boolean(state.user);
+    const isAdmin = Boolean(state.user?.isAdmin);
 
     elements.accountToggle.textContent = signedIn ? "Account" : "Sign in";
+    elements.accountRequestToggle.classList.toggle("hidden", signedIn);
+    elements.accountAdminToggle.classList.toggle("hidden", !isAdmin);
     elements.accountSummary.textContent = signedIn
         ? `Signed in as ${state.user.user || "account"}`
-        : "Sign in to manage tasks and activity.";
+        : (state.accountPanelMode === "request" ? "Request access with your 4 letter code." : "Sign in to manage tasks and activity.");
 
     elements.accountEmail.disabled = signedIn;
     elements.accountPassword.disabled = signedIn;
     elements.accountSubmit.disabled = signedIn;
     elements.accountSignout.classList.toggle("hidden", !signedIn);
+    if (!isAdmin && state.accountPanelMode === "admin") {
+        state.accountPanelMode = signedIn ? "signin" : "request";
+    }
+    if (signedIn && state.accountPanelMode === "request") {
+        state.accountPanelMode = "signin";
+    }
+    setAccountPanelMode(state.accountPanelMode);
+    renderAccountList();
+}
+
+function getAccountStatusText(account) {
+    const requested = account.requestedAt ? `requested ${formatShortTimestamp(account.requestedAt)}` : "requested";
+    if (account.status === "approved") {
+        const approved = account.approvedAt ? `approved ${formatShortTimestamp(account.approvedAt)}` : "approved";
+        return `${approved} by ${account.approvedBy || "admin"}`;
+    }
+    if (account.status === "rejected") {
+        return `rejected, ${requested}`;
+    }
+    return `pending, ${requested}`;
+}
+
+function renderAccountList() {
+    if (!elements.accountAdminList || !state.user?.isAdmin) {
+        return;
+    }
+
+    elements.accountAdminList.innerHTML = "";
+    if (state.accounts.length === 0) {
+        elements.accountAdminList.appendChild(createInlineEmptyState("No account requests yet."));
+        return;
+    }
+
+    state.accounts.forEach(account => {
+        const row = document.createElement("article");
+        row.className = "account-row";
+        row.dataset.status = account.status || "pending";
+
+        const copy = document.createElement("div");
+        const code = document.createElement("p");
+        code.className = "account-code";
+        code.textContent = account.code;
+        const meta = document.createElement("p");
+        meta.className = "account-meta";
+        meta.textContent = getAccountStatusText(account);
+        copy.append(code, meta);
+
+        const actions = document.createElement("div");
+        actions.className = "account-actions";
+
+        const approve = document.createElement("button");
+        approve.type = "button";
+        approve.className = "button button-primary";
+        approve.textContent = "Approve";
+        approve.dataset.accountCode = account.code;
+        approve.dataset.accountStatus = "approved";
+        approve.disabled = account.status === "approved";
+
+        const reject = document.createElement("button");
+        reject.type = "button";
+        reject.className = "button button-danger";
+        reject.textContent = "Reject";
+        reject.dataset.accountCode = account.code;
+        reject.dataset.accountStatus = "rejected";
+        reject.disabled = account.status === "rejected";
+
+        actions.append(approve, reject);
+        row.append(copy, actions);
+        elements.accountAdminList.appendChild(row);
+    });
+}
+
+async function refreshAccounts(provider) {
+    if (!state.user?.isAdmin || typeof provider.listAccounts !== "function") {
+        return;
+    }
+
+    setStatusMessage(elements.accountAdminStatus, "Loading accounts...");
+    try {
+        state.accounts = await provider.listAccounts();
+        renderAccountList();
+        setStatusMessage(elements.accountAdminStatus, "");
+    } catch (error) {
+        setStatusMessage(elements.accountAdminStatus, error.message, true);
+    }
 }
 
 function renderTasks(provider) {
@@ -473,7 +619,7 @@ function createTaskNode(task, provider, taskNumber) {
     const node = elements.taskTemplate.content.firstElementChild.cloneNode(true);
     const options = state.workerConfig.presetOptions || [];
     const presetLabel = options.find(option => option.id === task.preset)?.label || "Task";
-    const canManage = Boolean(state.user);
+    const canManage = canManageCurrentBoard();
     const isArchived = task.status === "archived";
     const isDoing = task.status === "doing";
     const isDone = task.status === "done";
@@ -735,6 +881,18 @@ class DemoWorkerBoardProvider {
         throw new Error("Owner login requires live Cloudflare mode.");
     }
 
+    async requestAccount() {
+        throw new Error("Account requests require live Cloudflare mode.");
+    }
+
+    async listAccounts() {
+        return [];
+    }
+
+    async updateAccountStatus() {
+        throw new Error("Account management requires live Cloudflare mode.");
+    }
+
     async logout() {
         return undefined;
     }
@@ -919,6 +1077,28 @@ class CloudflareWorkerBoardProvider {
         return payload;
     }
 
+    async requestAccount(code, password) {
+        return this.request("/api/accounts", {
+            method: "POST",
+            body: JSON.stringify({ code, password })
+        });
+    }
+
+    async listAccounts() {
+        const payload = await this.request("/api/accounts", {
+            auth: true
+        });
+        return payload?.accounts || [];
+    }
+
+    async updateAccountStatus(code, status) {
+        await this.request(`/api/accounts/${encodeURIComponent(code)}`, {
+            method: "PATCH",
+            auth: true,
+            body: JSON.stringify({ status })
+        });
+    }
+
     async logout() {
         try {
             await this.request("/api/logout", {
@@ -981,8 +1161,12 @@ async function init() {
 
     provider.onAuthChange(user => {
         state.user = user;
+        if (!user?.isAdmin) {
+            state.accounts = [];
+        }
         renderAccountState();
         renderTasks(provider);
+        refreshAccounts(provider);
     });
 
     elements.taskForm.addEventListener("submit", async event => {
@@ -1030,7 +1214,24 @@ async function init() {
 
     elements.accountToggle.addEventListener("click", event => {
         event.stopPropagation();
-        setAccountPanelOpen(elements.accountPanel.classList.contains("hidden"));
+        const isSameOpen = !elements.accountPanel.classList.contains("hidden") && state.accountPanelMode === "signin";
+        setAccountPanelOpen(!isSameOpen, "signin");
+    });
+
+    elements.accountRequestToggle.addEventListener("click", event => {
+        event.stopPropagation();
+        const isSameOpen = !elements.accountPanel.classList.contains("hidden") && state.accountPanelMode === "request";
+        setAccountPanelOpen(!isSameOpen, "request");
+    });
+
+    elements.accountAdminToggle.addEventListener("click", event => {
+        event.stopPropagation();
+        const isSameOpen = !elements.accountPanel.classList.contains("hidden") && state.accountPanelMode === "admin";
+        setAccountPanelOpen(!isSameOpen, "admin");
+        if (isSameOpen) {
+            return;
+        }
+        refreshAccounts(provider);
     });
 
     elements.doneToggle.addEventListener("click", () => {
@@ -1050,6 +1251,28 @@ async function init() {
         }
     });
 
+    elements.requestCode.addEventListener("input", () => {
+        elements.requestCode.value = normalizeAccountCode(elements.requestCode.value);
+    });
+
+    elements.accountRequestForm.addEventListener("submit", async event => {
+        event.preventDefault();
+        const code = normalizeAccountCode(elements.requestCode.value);
+        elements.requestCode.value = code;
+        setStatusMessage(elements.requestStatus, "Sending request...");
+
+        try {
+            if (code.length !== 4) {
+                throw new Error("Account code must be four letters.");
+            }
+            await provider.requestAccount(code, elements.requestPassword.value);
+            elements.requestPassword.value = "";
+            setStatusMessage(elements.requestStatus, "Request sent. It will stay pending until admin approval.");
+        } catch (error) {
+            setStatusMessage(elements.requestStatus, error.message, true);
+        }
+    });
+
     elements.accountSignout.addEventListener("click", async () => {
         setStatusMessage(elements.accountStatus, "Signing out...");
 
@@ -1058,6 +1281,31 @@ async function init() {
             setStatusMessage(elements.accountStatus, "Signed out.");
         } catch (error) {
             setStatusMessage(elements.accountStatus, error.message, true);
+        }
+    });
+
+    elements.accountAdminRefresh.addEventListener("click", () => {
+        refreshAccounts(provider);
+    });
+
+    elements.accountAdminList.addEventListener("click", async event => {
+        const button = event.target.closest("[data-account-code][data-account-status]");
+        if (!button) {
+            return;
+        }
+
+        const code = button.dataset.accountCode;
+        const status = button.dataset.accountStatus;
+        button.disabled = true;
+        setStatusMessage(elements.accountAdminStatus, `${status === "approved" ? "Approving" : "Updating"} ${code}...`);
+
+        try {
+            await provider.updateAccountStatus(code, status);
+            await refreshAccounts(provider);
+            setStatusMessage(elements.accountAdminStatus, `${code} ${status}.`);
+        } catch (error) {
+            setStatusMessage(elements.accountAdminStatus, error.message, true);
+            button.disabled = false;
         }
     });
 
@@ -1157,7 +1405,7 @@ async function init() {
             setFabOpen(false);
             setFabHover(false);
         }
-        if (!elements.accountPanel.contains(event.target) && !elements.accountToggle.contains(event.target)) {
+        if (!elements.accountPanel.contains(event.target) && !event.target.closest(".account-toolbar")) {
             setAccountPanelOpen(false);
         }
         if (!event.target.closest(".task-indicator-wrap")) {
@@ -1170,6 +1418,7 @@ async function init() {
             elements.fabShell.classList.remove("is-hover-locked");
             setFabOpen(false);
             setFabHover(false);
+            setAccountPanelOpen(false);
             closeOpenTaskMenus();
         }
     });

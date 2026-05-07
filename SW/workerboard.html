@@ -20,13 +20,17 @@
             <div id="worker-nav" class="worker-nav"></div>
         </div>
         <div class="account-area">
-            <button id="account-toggle" class="account-toggle" type="button" aria-expanded="false" aria-controls="account-panel">Sign in</button>
+            <div class="account-toolbar">
+                <button id="account-request-toggle" class="account-toggle" type="button" aria-expanded="false" aria-controls="account-panel">Create account</button>
+                <button id="account-admin-toggle" class="account-toggle hidden" type="button" aria-expanded="false" aria-controls="account-panel">Accounts</button>
+                <button id="account-toggle" class="account-toggle" type="button" aria-expanded="false" aria-controls="account-panel">Sign in</button>
+            </div>
             <div id="account-panel" class="account-panel hidden">
                 <p id="account-summary" class="account-summary">Not signed in</p>
                 <form id="account-form" class="account-form">
                     <label class="field">
-                        <span>Username</span>
-                        <input id="account-email" type="text" autocomplete="username" placeholder="BRBO account">
+                        <span>Account code</span>
+                        <input id="account-email" type="text" autocomplete="username" placeholder="ABCD or admin">
                     </label>
                     <label class="field">
                         <span>Password</span>
@@ -38,6 +42,27 @@
                     </div>
                     <p id="account-status" class="form-status" aria-live="polite"></p>
                 </form>
+                <form id="account-request-form" class="account-form account-request-form">
+                    <p class="account-section-title">Create account</p>
+                    <label class="field">
+                        <span>4 letter code</span>
+                        <input id="request-code" type="text" inputmode="latin" maxlength="4" autocomplete="username" placeholder="ABCD">
+                    </label>
+                    <label class="field">
+                        <span>Password</span>
+                        <input id="request-password" type="password" autocomplete="new-password" placeholder="Choose a password">
+                    </label>
+                    <button id="request-submit" type="submit" class="button button-secondary">Request account</button>
+                    <p id="request-status" class="form-status" aria-live="polite"></p>
+                </form>
+                <section id="account-admin-panel" class="account-admin-panel hidden">
+                    <div class="account-admin-heading">
+                        <p class="account-section-title">Account management</p>
+                        <button id="account-admin-refresh" type="button" class="button button-secondary">Refresh</button>
+                    </div>
+                    <div id="account-admin-list" class="account-admin-list"></div>
+                    <p id="account-admin-status" class="form-status" aria-live="polite"></p>
+                </section>
             </div>
         </div>
     </header>

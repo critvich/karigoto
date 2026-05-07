@@ -35,6 +35,19 @@ export default {
         return getSession(request, env);
       }
 
+      if (path === "/api/accounts" && request.method === "POST") {
+        return requestAccount(request, env);
+      }
+
+      if (path === "/api/accounts" && request.method === "GET") {
+        return listAccounts(request, env);
+      }
+
+      const accountMatch = path.match(/^\/api\/accounts\/([A-Z]{4})$/i);
+      if (accountMatch && request.method === "PATCH") {
+        return updateAccountStatus(request, env, normalizeAccountCode(accountMatch[1]));
+      }
+
       if (path === "/api/display" && request.method === "GET") {
         return getDisplayState(env);
       }
@@ -174,6 +187,29 @@ function createToken() {
   return [...bytes].map(byte => byte.toString(16).padStart(2, "0")).join("");
 }
 
+function createSalt() {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map(byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function normalizeAccountCode(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function isValidAccountCode(code) {
+  return /^[A-Z]{4}$/.test(code);
+}
+
+async function hashAccountPassword(password, salt) {
+  return sha256Hex(`${salt}:${password}`);
+}
+
+function isAdminUser(env, user) {
+  const adminUser = String(env.ADMIN_USER || "display-admin").trim();
+  return String(user || "").trim() === adminUser;
+}
+
 async function getBearerToken(request) {
   const header = request.headers.get("Authorization") || "";
   const match = header.match(/^Bearer\s+(.+)$/i);
@@ -207,14 +243,41 @@ async function requireAuth(request, env) {
     session: {
       id: row.id,
       user: row.username,
-      workerCode: row.worker_code
+      workerCode: row.worker_code,
+      isAdmin: isAdminUser(env, row.username)
     }
   };
 }
 
+async function requireAdmin(request, env) {
+  const auth = await requireAuth(request, env);
+  if (!auth.ok) {
+    return auth;
+  }
+
+  if (!auth.session.isAdmin) {
+    return { ok: false, response: unauthorized("Admin account required.") };
+  }
+
+  return auth;
+}
+
+async function requireWorkerAccess(request, env, workerCode) {
+  const auth = await requireAuth(request, env);
+  if (!auth.ok) {
+    return auth;
+  }
+
+  if (!auth.session.isAdmin && auth.session.workerCode !== workerCode) {
+    return { ok: false, response: unauthorized("This account cannot manage this board.") };
+  }
+
+  return auth;
+}
+
 async function login(request, env) {
   const body = await readJson(request);
-  const user = String(body.user || "").trim();
+  const user = normalizeAccountCode(body.user);
   const password = String(body.password || "");
   const workerCode = String(body.workerCode || "BRBO").trim().toUpperCase();
 
@@ -226,15 +289,41 @@ async function login(request, env) {
     return badRequest("Unknown worker code.");
   }
 
-  if (user !== String(env.ADMIN_USER || "").trim()) {
+  if (isAdminUser(env, body.user)) {
+    if (password !== String(env.ADMIN_PASSWORD || "")) {
+      return unauthorized("Incorrect password.");
+    }
+
+    return createSession(env, String(env.ADMIN_USER || "display-admin").trim(), workerCode);
+  }
+
+  if (!isValidAccountCode(user)) {
+    return badRequest("Account code must be four letters.");
+  }
+
+  const account = await env.boardbinding
+    .prepare("SELECT code, password_salt, password_hash, status FROM accounts WHERE code = ? LIMIT 1")
+    .bind(user)
+    .first();
+
+  if (!account) {
     return unauthorized("This account is not allowed.");
   }
 
-  if (password !== String(env.ADMIN_PASSWORD || "")) {
+  if (account.status === "pending") {
+    return unauthorized("This account is waiting for admin approval.");
+  }
+
+  if (account.status !== "approved") {
+    return unauthorized("This account is not approved.");
+  }
+
+  const passwordHash = await hashAccountPassword(password, account.password_salt);
+  if (passwordHash !== account.password_hash) {
     return unauthorized("Incorrect password.");
   }
 
-  return createSession(env, user, workerCode);
+  return createSession(env, account.code, account.code);
 }
 
 async function displayLogin(request, env) {
@@ -284,7 +373,8 @@ async function createSession(env, user, workerCode) {
     token,
     user: {
       user,
-      workerCode
+      workerCode,
+      isAdmin: isAdminUser(env, user)
     }
   });
 }
@@ -313,9 +403,135 @@ async function getSession(request, env) {
   return json({
     user: {
       user: auth.session.user,
-      workerCode: auth.session.workerCode
+      workerCode: auth.session.workerCode,
+      isAdmin: auth.session.isAdmin
     }
   });
+}
+
+async function requestAccount(request, env) {
+  const body = await readJson(request);
+  const code = normalizeAccountCode(body.code);
+  const password = String(body.password || "");
+
+  if (!isValidAccountCode(code)) {
+    return badRequest("Account code must be four letters.");
+  }
+
+  if (password.length < 6) {
+    return badRequest("Password must be at least 6 characters.");
+  }
+
+  if (isAdminUser(env, code)) {
+    return badRequest("That account code is reserved.");
+  }
+
+  const existing = await env.boardbinding
+    .prepare("SELECT status FROM accounts WHERE code = ? LIMIT 1")
+    .bind(code)
+    .first();
+
+  if (existing?.status === "pending") {
+    return badRequest("That account is already waiting for approval.");
+  }
+
+  if (existing?.status === "approved") {
+    return badRequest("That account already exists.");
+  }
+
+  const now = new Date().toISOString();
+  const salt = createSalt();
+  const passwordHash = await hashAccountPassword(password, salt);
+
+  await env.boardbinding
+    .prepare(`
+      INSERT INTO accounts (code, password_salt, password_hash, status, requested_at, approved_at, approved_by, updated_at)
+      VALUES (?, ?, ?, 'pending', ?, NULL, '', ?)
+      ON CONFLICT(code) DO UPDATE SET
+        password_salt = excluded.password_salt,
+        password_hash = excluded.password_hash,
+        status = 'pending',
+        requested_at = excluded.requested_at,
+        approved_at = NULL,
+        approved_by = '',
+        updated_at = excluded.updated_at
+    `)
+    .bind(code, salt, passwordHash, now, now)
+    .run();
+
+  return json({
+    ok: true,
+    account: {
+      code,
+      status: "pending",
+      requestedAt: now
+    }
+  }, 201);
+}
+
+async function listAccounts(request, env) {
+  const auth = await requireAdmin(request, env);
+  if (!auth.ok) {
+    return auth.response;
+  }
+
+  const { results } = await env.boardbinding
+    .prepare(`
+      SELECT code, status, requested_at, approved_at, approved_by, updated_at
+      FROM accounts
+      ORDER BY
+        CASE status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
+        datetime(requested_at) DESC
+    `)
+    .all();
+
+  return json({
+    accounts: results.map(row => ({
+      code: row.code,
+      status: row.status,
+      requestedAt: row.requested_at,
+      approvedAt: row.approved_at,
+      approvedBy: row.approved_by,
+      updatedAt: row.updated_at
+    }))
+  });
+}
+
+async function updateAccountStatus(request, env, code) {
+  const auth = await requireAdmin(request, env);
+  if (!auth.ok) {
+    return auth.response;
+  }
+
+  const body = await readJson(request);
+  const nextStatus = String(body.status || "").trim().toLowerCase();
+  if (!["approved", "rejected", "pending"].includes(nextStatus)) {
+    return badRequest("Status must be approved, rejected, or pending.");
+  }
+
+  const existing = await env.boardbinding
+    .prepare("SELECT code FROM accounts WHERE code = ? LIMIT 1")
+    .bind(code)
+    .first();
+
+  if (!existing) {
+    return json({ error: "Account not found." }, 404);
+  }
+
+  const now = new Date().toISOString();
+  const approvedAt = nextStatus === "approved" ? now : null;
+  const approvedBy = nextStatus === "approved" ? auth.session.user : "";
+
+  await env.boardbinding
+    .prepare(`
+      UPDATE accounts
+      SET status = ?, approved_at = ?, approved_by = ?, updated_at = ?
+      WHERE code = ?
+    `)
+    .bind(nextStatus, approvedAt, approvedBy, now, code)
+    .run();
+
+  return json({ ok: true });
 }
 
 function getDefaultDisplayState() {
@@ -396,7 +612,7 @@ async function getDisplayState(env) {
 }
 
 async function updateDisplayState(request, env) {
-  const auth = await requireAuth(request, env);
+  const auth = await requireAdmin(request, env);
   if (!auth.ok) {
     return auth.response;
   }
@@ -523,7 +739,7 @@ async function listMediaAssets(env) {
 }
 
 async function createLinkedMediaAsset(request, env) {
-  const auth = await requireAuth(request, env);
+  const auth = await requireAdmin(request, env);
   if (!auth.ok) {
     return auth.response;
   }
@@ -554,7 +770,7 @@ async function createLinkedMediaAsset(request, env) {
 }
 
 async function uploadMediaAsset(request, env, origin) {
-  const auth = await requireAuth(request, env);
+  const auth = await requireAdmin(request, env);
   if (!auth.ok) {
     return auth.response;
   }
@@ -640,7 +856,7 @@ async function getMediaAssetContent(request, env, assetId) {
 }
 
 async function deleteMediaAsset(request, env, assetId) {
-  const auth = await requireAuth(request, env);
+  const auth = await requireAdmin(request, env);
   if (!auth.ok) {
     return auth.response;
   }
@@ -811,7 +1027,7 @@ async function updateActivity(request, env, workerCode) {
     return badRequest("Unknown worker code.");
   }
 
-  const auth = await requireAuth(request, env);
+  const auth = await requireWorkerAccess(request, env, workerCode);
   if (!auth.ok) {
     return auth.response;
   }
@@ -934,7 +1150,7 @@ async function updateTask(request, env, workerCode, taskId) {
     return badRequest("Unknown worker code.");
   }
 
-  const auth = await requireAuth(request, env);
+  const auth = await requireWorkerAccess(request, env, workerCode);
   if (!auth.ok) {
     return auth.response;
   }
@@ -1027,7 +1243,7 @@ async function deleteTask(request, env, workerCode, taskId) {
     return badRequest("Unknown worker code.");
   }
 
-  const auth = await requireAuth(request, env);
+  const auth = await requireWorkerAccess(request, env, workerCode);
   if (!auth.ok) {
     return auth.response;
   }
