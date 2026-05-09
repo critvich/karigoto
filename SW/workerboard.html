@@ -5,14 +5,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Worker Board</title>
-    <link rel="icon" type="image/png" href="media/images/blue%20logo.png">
+    <link rel="icon" type="image/png" href="media/images/invert%20logo.png">
     <link rel="stylesheet" href="css/workerboard.css">
 </head>
 
 <body>
     <header class="worker-header">
         <div class="worker-brand">
-            <p class="brand-path">.to / SW / <span id="worker-code-header">BRBO</span></p>
+            <p class="brand-path">.to / <a href="../SW.html">SW</a> / <span id="worker-code-header">board</span></p>
             <h1 id="worker-title">SW Task Board</h1>
         </div>
         <div class="worker-switcher">
@@ -30,7 +30,7 @@
                 <form id="account-form" class="account-form">
                     <label class="field">
                         <span>Account code</span>
-                        <input id="account-email" type="text" autocomplete="username" placeholder="ABCD or admin">
+                        <input id="account-email" type="text" autocomplete="username" placeholder="ABCD">
                     </label>
                     <label class="field">
                         <span>Password</span>
@@ -75,10 +75,14 @@
                 <p id="activity-detail" class="hero-detail">Pulling the current status now.</p>
             </div>
             <div class="banner-side">
-                <button id="activity-unpin" class="button button-danger hidden" type="button">Unpin</button>
+                <div class="banner-top-actions">
+                    <button id="activity-unpin" class="button button-danger hidden" type="button">Unpin</button>
+                    <button id="custom-activity-add" class="button button-secondary hidden" type="button">Custom</button>
+                </div>
                 <button id="activity-complete" class="button button-primary hidden" type="button">Complete</button>
-                <button id="activity-routine" class="button button-secondary hidden" type="button">Daily routine</button>
-                <button id="activity-lunch" class="button button-secondary hidden" type="button">I'm on lunch</button>
+                <div id="quick-activity-actions" class="quick-activity-actions hidden">
+                    <div id="custom-activity-buttons" class="custom-activity-buttons"></div>
+                </div>
                 <p id="activity-updated" class="hero-meta"></p>
             </div>
         </section>
@@ -89,6 +93,23 @@
                     <p class="eyebrow">Board</p>
                     <h2><span id="worker-code-feed">BRBO</span> queue</h2>
                 </div>
+                <div class="board-controls" aria-label="Board sorting and filtering">
+                    <label class="board-control">
+                        <span>Sort</span>
+                        <select id="board-sort">
+                            <option value="newest">Newest</option>
+                            <option value="oldest">Oldest</option>
+                            <option value="priority">Priority</option>
+                        </select>
+                    </label>
+                    <label class="board-control">
+                        <span>Filter</span>
+                        <select id="board-filter">
+                            <option value="all">All</option>
+                        </select>
+                    </label>
+                    <button id="board-expand" class="board-expand-button button button-secondary" type="button" aria-expanded="false">Expand</button>
+                </div>
                 <p id="board-note" class="board-note">An empty board waiting for things to be pinned onto it.</p>
             </div>
 
@@ -98,10 +119,13 @@
     </main>
 
     <aside id="done-drawer" class="done-drawer">
-        <button id="done-toggle" class="done-toggle" type="button" aria-expanded="false" aria-controls="done-panel">
-            <span class="done-toggle-label">Done Posts</span>
-            <span class="done-toggle-meta" id="done-toggle-meta">0 today</span>
-        </button>
+        <div class="done-toggle-bar">
+            <button id="done-toggle" class="done-toggle" type="button" aria-expanded="false" aria-controls="done-panel">
+                <span class="done-toggle-label">Done Posts</span>
+                <span class="done-toggle-meta" id="done-toggle-meta">0 today</span>
+            </button>
+            <button id="archive-toggle" class="archive-toggle" type="button">Archived posts</button>
+        </div>
         <section id="done-panel" class="done-panel">
             <div class="board-heading board-heading-secondary">
                 <div>
@@ -128,16 +152,47 @@
 
                 <div id="extra-fields" class="extra-fields"></div>
 
-                <label class="field">
-                    <span>Posted by</span>
-                    <input id="task-author" type="text" maxlength="32" placeholder="Anonymous is fine">
-                </label>
-
                 <button type="submit" class="button button-primary">Post task</button>
-                <button id="fab-back" class="fab-back button button-secondary" type="button">Back</button>
+                <div class="fab-actions">
+                    <button id="fab-clear" class="fab-clear button button-secondary" type="button">Clear</button>
+                    <button id="fab-back" class="fab-back button button-secondary" type="button">Back</button>
+                </div>
                 <p id="submit-status" class="form-status" aria-live="polite"></p>
             </form>
         </div>
+    </aside>
+
+    <aside id="custom-activity-panel" class="custom-activity-panel hidden" aria-modal="true" role="dialog" aria-labelledby="custom-activity-title">
+        <form id="custom-activity-form" class="custom-activity-form">
+            <div class="custom-activity-heading">
+                <div>
+                    <p class="eyebrow">Quick buttons</p>
+                    <h2 id="custom-activity-title">Customize buttons</h2>
+                </div>
+                <button id="custom-activity-close" class="button button-secondary" type="button">Close</button>
+            </div>
+            <div class="custom-activity-list-row">
+                <div id="custom-activity-list" class="custom-activity-list"></div>
+                <button id="custom-activity-new" class="custom-activity-new" type="button" aria-label="New button">+</button>
+            </div>
+            <label class="field">
+                <span>Button label</span>
+                <input id="custom-button-label" type="text" maxlength="18" placeholder="Example: Lunch">
+            </label>
+            <label class="field">
+                <span>Header</span>
+                <input id="custom-button-title" type="text" maxlength="80" placeholder="Example: On lunch">
+            </label>
+            <label class="field">
+                <span>Subtext</span>
+                <input id="custom-button-detail" type="text" maxlength="180" placeholder="Example: BRBO is on lunch right now.">
+            </label>
+            <div class="inline-actions">
+                <button id="custom-activity-save" class="button button-primary" type="submit">Save button</button>
+                <button id="custom-activity-delete" class="button button-danger hidden" type="button">Delete</button>
+            </div>
+            <p id="custom-activity-status" class="form-status" aria-live="polite"></p>
+        </form>
     </aside>
 
     <template id="task-card-template">

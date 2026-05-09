@@ -43,9 +43,17 @@ export default {
         return listAccounts(request, env);
       }
 
+      if (path === "/api/workers" && request.method === "GET") {
+        return listWorkers(env);
+      }
+
       const accountMatch = path.match(/^\/api\/accounts\/([A-Z]{4})$/i);
       if (accountMatch && request.method === "PATCH") {
         return updateAccountStatus(request, env, normalizeAccountCode(accountMatch[1]));
+      }
+
+      if (accountMatch && request.method === "DELETE") {
+        return deleteAccount(request, env, normalizeAccountCode(accountMatch[1]));
       }
 
       if (path === "/api/display" && request.method === "GET") {
@@ -159,12 +167,47 @@ function getIsoDaysAgo(days) {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 }
 
-function isAllowedWorker(env, workerCode) {
-  const allowed = String(env.ALLOWED_WORKER_CODES || "BRBO")
+function getConfiguredWorkerCodes(env) {
+  return String(env.ALLOWED_WORKER_CODES || "BRBO")
     .split(",")
     .map(value => value.trim().toUpperCase())
     .filter(Boolean);
-  return allowed.includes(workerCode);
+}
+
+async function isAllowedWorker(env, workerCode) {
+  const normalizedWorkerCode = String(workerCode || "").trim().toUpperCase();
+  if (!/^[A-Z0-9]{4}$/.test(normalizedWorkerCode)) {
+    return false;
+  }
+
+  if (getConfiguredWorkerCodes(env).includes(normalizedWorkerCode)) {
+    return true;
+  }
+
+  const account = await env.boardbinding
+    .prepare("SELECT code FROM accounts WHERE code = ? AND status IN ('pending', 'approved') LIMIT 1")
+    .bind(normalizedWorkerCode)
+    .first();
+
+  return Boolean(account);
+}
+
+async function listWorkers(env) {
+  const configuredCodes = getConfiguredWorkerCodes(env);
+  const { results } = await env.boardbinding
+    .prepare("SELECT code FROM accounts WHERE status IN ('pending', 'approved') ORDER BY code ASC")
+    .all();
+  const codes = [...new Set([
+    ...configuredCodes,
+    ...results.map(row => row.code)
+  ])].filter(code => /^[A-Z0-9]{4}$/.test(code));
+
+  return json({
+    workers: codes.map(code => ({
+      code,
+      title: `${code} Task Board`
+    }))
+  });
 }
 
 async function readJson(request) {
@@ -238,13 +281,29 @@ async function requireAuth(request, env) {
     return { ok: false, response: unauthorized("Session expired or invalid.") };
   }
 
+  const isAdmin = isAdminUser(env, row.username);
+  if (!isAdmin) {
+    const account = await env.boardbinding
+      .prepare("SELECT code FROM accounts WHERE code = ? AND status = 'approved' LIMIT 1")
+      .bind(row.username)
+      .first();
+
+    if (!account) {
+      await env.boardbinding
+        .prepare("DELETE FROM sessions WHERE id = ?")
+        .bind(row.id)
+        .run();
+      return { ok: false, response: unauthorized("Session expired or invalid.") };
+    }
+  }
+
   return {
     ok: true,
     session: {
       id: row.id,
       user: row.username,
       workerCode: row.worker_code,
-      isAdmin: isAdminUser(env, row.username)
+      isAdmin
     }
   };
 }
@@ -285,7 +344,7 @@ async function login(request, env) {
     return badRequest("Username and password are required.");
   }
 
-  if (!isAllowedWorker(env, workerCode)) {
+  if (!await isAllowedWorker(env, workerCode)) {
     return badRequest("Unknown worker code.");
   }
 
@@ -336,7 +395,7 @@ async function displayLogin(request, env) {
     return badRequest("Password is required.");
   }
 
-  if (!isAllowedWorker(env, workerCode)) {
+  if (!await isAllowedWorker(env, workerCode)) {
     return badRequest("Unknown worker code.");
   }
 
@@ -529,6 +588,34 @@ async function updateAccountStatus(request, env, code) {
       WHERE code = ?
     `)
     .bind(nextStatus, approvedAt, approvedBy, now, code)
+    .run();
+
+  return json({ ok: true });
+}
+
+async function deleteAccount(request, env, code) {
+  const auth = await requireAdmin(request, env);
+  if (!auth.ok) {
+    return auth.response;
+  }
+
+  const existing = await env.boardbinding
+    .prepare("SELECT code FROM accounts WHERE code = ? LIMIT 1")
+    .bind(code)
+    .first();
+
+  if (!existing) {
+    return json({ error: "Account not found." }, 404);
+  }
+
+  await env.boardbinding
+    .prepare("DELETE FROM accounts WHERE code = ?")
+    .bind(code)
+    .run();
+
+  await env.boardbinding
+    .prepare("DELETE FROM sessions WHERE username = ?")
+    .bind(code)
     .run();
 
   return json({ ok: true });
@@ -964,7 +1051,7 @@ function parseRangeHeader(header, totalSize) {
 }
 
 async function getActivity(env, workerCode) {
-  if (!isAllowedWorker(env, workerCode)) {
+  if (!await isAllowedWorker(env, workerCode)) {
     return badRequest("Unknown worker code.");
   }
 
@@ -1023,7 +1110,7 @@ async function getActivity(env, workerCode) {
 }
 
 async function updateActivity(request, env, workerCode) {
-  if (!isAllowedWorker(env, workerCode)) {
+  if (!await isAllowedWorker(env, workerCode)) {
     return badRequest("Unknown worker code.");
   }
 
@@ -1063,7 +1150,7 @@ async function updateActivity(request, env, workerCode) {
 }
 
 async function listTasks(env, workerCode) {
-  if (!isAllowedWorker(env, workerCode)) {
+  if (!await isAllowedWorker(env, workerCode)) {
     return badRequest("Unknown worker code.");
   }
 
@@ -1099,15 +1186,20 @@ async function listTasks(env, workerCode) {
 }
 
 async function createTask(request, env, workerCode) {
-  if (!isAllowedWorker(env, workerCode)) {
+  if (!await isAllowedWorker(env, workerCode)) {
     return badRequest("Unknown worker code.");
+  }
+
+  const auth = await requireAuth(request, env);
+  if (!auth.ok) {
+    return auth.response;
   }
 
   const body = await readJson(request);
   const preset = String(body.preset || "").trim();
   const title = String(body.title || "").trim();
   const detail = String(body.detail || "").trim();
-  const author = String(body.author || "").trim().slice(0, 32);
+  const author = String(auth.session.isAdmin ? workerCode : auth.session.user || "").trim().slice(0, 32);
   const priority = normalizePriority(body.priority);
 
   if (!preset || !title) {
@@ -1146,7 +1238,7 @@ async function createTask(request, env, workerCode) {
 }
 
 async function updateTask(request, env, workerCode, taskId) {
-  if (!isAllowedWorker(env, workerCode)) {
+  if (!await isAllowedWorker(env, workerCode)) {
     return badRequest("Unknown worker code.");
   }
 
@@ -1239,7 +1331,7 @@ async function updateTask(request, env, workerCode, taskId) {
 }
 
 async function deleteTask(request, env, workerCode, taskId) {
-  if (!isAllowedWorker(env, workerCode)) {
+  if (!await isAllowedWorker(env, workerCode)) {
     return badRequest("Unknown worker code.");
   }
 

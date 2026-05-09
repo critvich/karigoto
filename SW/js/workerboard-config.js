@@ -81,18 +81,18 @@ window.SW_WORKER_BOARD_CONFIG = {
                 },
                 {
                     id: "delivery-report",
-                    label: "Delivery report new shipment",
-                    titleHint: "Report a new shipment delivery",
+                    label: "Arrival report new shipment",
+                    titleHint: "Report a new shipment arrival",
                     extraFields: [
                         {
                             id: "delivery-location",
-                            label: "Location (optional)",
+                            label: "Location",
                             type: "text",
                             placeholder: "Optional location"
                         },
                         {
                             id: "delivery-order-number",
-                            label: "Order number (optional)",
+                            label: "Order number",
                             type: "text",
                             placeholder: "Optional order number"
                         }
@@ -130,7 +130,7 @@ window.SW_WORKER_BOARD_CONFIG = {
                         },
                         {
                             id: "ncr-claim-number",
-                            label: "Claim number (if there is one already)",
+                            label: "Claim number",
                             type: "text",
                             placeholder: "Optional claim number"
                         }

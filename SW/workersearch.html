@@ -5,85 +5,106 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>.to/SW/workersearch</title>
-    <link rel="icon" type="image/png" href="media/images/blue%20logo.png">
-    <link rel="stylesheet" href="css/compilemain.css" />
-    <link rel="stylesheet" href="css/header.css" />
-    <script type="module" src="https://unpkg.com/ionicons@5.5.2/dist/ionicons/ionicons.esm.js"></script>
+    <link rel="icon" type="image/png" href="media/images/invert%20logo.png">
+    <link rel="stylesheet" href="css/workerboard.css">
+    <link rel="stylesheet" href="css/workersearch.css">
     <script src="js/vendor/qrcode.min.js"></script>
     <script src="js/vendor/jspdf.umd.min.js"></script>
 </head>
 
-
-
 <body>
-    <header>
-        <nav class="header">
-            <a href="#" class="main-nav-link" id="headerLink">.to</a>
-            <p class="main-nav-slash">/</p>
-            <a href="#" class="main-nav-link" id="headerLink">SW</a>
-            <p class="main-nav-slash">/</p>
-            <a href="#" class="main-nav-link" id="headerLink">workersearch</a>
-        </nav>
-        <nav class="imghead" id="imghead" style="display: none;">
-            <h1>Image</h1>
-        </nav>
-        <script src="muffin/js/header.js"></script>
+    <header class="worker-header search-header">
+        <div class="worker-brand">
+            <p class="brand-path">.to / <a href="../SW.html">SW</a> / workersearch</p>
+            <h1 id="worker-title">Worker Parts</h1>
+        </div>
+        <div class="account-area">
+            <div class="account-toolbar">
+                <button id="account-request-toggle" class="account-toggle" type="button" aria-expanded="false" aria-controls="account-panel">Create account</button>
+                <button id="account-toggle" class="account-toggle" type="button" aria-expanded="false" aria-controls="account-panel">Sign in</button>
+            </div>
+            <div id="account-panel" class="account-panel hidden">
+                <p id="account-summary" class="account-summary">Not signed in</p>
+                <form id="account-form" class="account-form">
+                    <label class="field">
+                        <span>Account code</span>
+                        <input id="account-email" type="text" autocomplete="username" placeholder="ABCD or admin">
+                    </label>
+                    <label class="field">
+                        <span>Password</span>
+                        <input id="account-password" type="password" autocomplete="current-password" placeholder="Password">
+                    </label>
+                    <div class="inline-actions">
+                        <button id="account-submit" type="submit" class="button button-primary">Sign in</button>
+                        <button id="account-signout" type="button" class="button button-secondary hidden">Sign out</button>
+                    </div>
+                    <p id="account-status" class="form-status" aria-live="polite"></p>
+                </form>
+                <form id="account-request-form" class="account-form account-request-form hidden">
+                    <p class="account-section-title">Create account</p>
+                    <label class="field">
+                        <span>4 letter code</span>
+                        <input id="request-code" type="text" inputmode="latin" maxlength="4" autocomplete="username" placeholder="ABCD">
+                    </label>
+                    <label class="field">
+                        <span>Password</span>
+                        <input id="request-password" type="password" autocomplete="new-password" placeholder="Choose a password">
+                    </label>
+                    <button id="request-submit" type="submit" class="button button-secondary">Request account</button>
+                    <p id="request-status" class="form-status" aria-live="polite"></p>
+                </form>
+            </div>
+        </div>
     </header>
-    <div class="spacer" id="toppagespace">
-        <p>Gramps</p>
-    </div>
 
+    <main class="worker-shell worker-search-shell">
+        <section class="current-banner search-banner">
+            <div class="banner-copy">
+                <p class="eyebrow">Part Lookup</p>
+                <h2>Search Steelwrist parts</h2>
+                <p class="hero-detail">Load one part or add rows for multiple parts.</p>
+            </div>
+            <div class="banner-side search-upload auth-only hidden">
+                <label class="field">
+                    <span>Import XML</span>
+                    <input id="xml-upload" type="file" accept=".xml" />
+                </label>
+            </div>
+        </section>
 
+        <section class="board-space search-board">
+            <div class="board-heading">
+                <div>
+                    <p class="eyebrow">Search</p>
+                    <h2>Parts queue</h2>
+                </div>
+                <p id="signed-out-note" class="board-note">Each row can load a part image and portal link.</p>
+            </div>
 
-    <div class="sidebar" id="sidebar">
-        <p class="spacer">Gramps</p>
-        <div class="start">
-            <a href="#" class="linkl sidebarl large defaultopen" data-target="0"></a>
-        </div>
-        <div class="upside">
-            <div><a href="#" class="linkl sidebarl large" data-target="1"></a></div>
-        </div>
-        <div class="downside">
-            <a href="../muffin.html" class="linkl large back"></a>
-        </div>
-    </div>
-
-
-
-    <div class="base">
-        <div id="section0" class="slider">
-            <section class="page">
-                <article class="topping">
-                    <h1 class="headed">Worker Parts</h1>
-
-                    <div class="smallspacer"></div>
-
-                    <div class="content">
-                        <input id="xml-upload" type="file" accept=".xml" />
+            <div class="search-toolbar">
+                <button id="add-part-row" class="button button-primary" type="button">Add Row</button>
+                <div class="share-panel auth-only hidden">
+                    <div>
+                        <p class="eyebrow">Share</p>
+                        <p class="hero-meta">Create a PDF with a QR code for the current link.</p>
                     </div>
+                    <button id="download-qr-pdf" class="button button-secondary" type="button">Open QR PDF</button>
+                </div>
+            </div>
 
-                    <div id="parts-list"></div>
+            <div class="base">
+                <div id="section0" class="slider">
+                    <section class="page search-page">
+                        <div id="parts-list"></div>
+                    </section>
+                </div>
+            </div>
+        </section>
+    </main>
 
-                    <div class="content">
-                        <button id="add-part-row" type="button">Add Row</button>
-                    </div>
-
-                    <div class="smallspacer"></div>
-
-                    <div class="content">
-                        <p class="seconded">Share Current Search</p>
-                        <p class="medium">Create a PDF with a QR code for the current link.</p>
-                        <button id="download-qr-pdf" type="button">Open QR PDF</button>
-                    </div>
-                </article>
-            </section>
-        </div>
-
-        <div id="imgund" class="imgunderlay" style="display: none;"></div>
-        <script src="js/main.js"></script>
-        <!-- <script src="copyscript.js"></script> -->
-    </div>
-    
+    <div id="imgund" class="imgunderlay" style="display: none;"></div>
+    <script src="js/workerboard-config.js"></script>
+    <script src="js/main.js"></script>
 </body>
 
 </html>

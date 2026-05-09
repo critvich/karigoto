@@ -9,6 +9,7 @@ const appConfig = {
     ...baseConfig,
     ...(window.SW_WORKER_BOARD_CONFIG || {})
 };
+const configuredWorkerCodes = new Set(Object.keys(appConfig.workers));
 
 const elements = {
     workerCodeHeader: document.getElementById("worker-code-header"),
@@ -35,26 +36,41 @@ const elements = {
     accountAdminStatus: document.getElementById("account-admin-status"),
     activityUnpin: document.getElementById("activity-unpin"),
     activityComplete: document.getElementById("activity-complete"),
-    activityRoutine: document.getElementById("activity-routine"),
-    activityLunch: document.getElementById("activity-lunch"),
+    quickActivityActions: document.getElementById("quick-activity-actions"),
+    customActivityButtons: document.getElementById("custom-activity-buttons"),
+    customActivityAdd: document.getElementById("custom-activity-add"),
+    customActivityPanel: document.getElementById("custom-activity-panel"),
+    customActivityForm: document.getElementById("custom-activity-form"),
+    customActivityList: document.getElementById("custom-activity-list"),
+    customButtonLabel: document.getElementById("custom-button-label"),
+    customButtonTitle: document.getElementById("custom-button-title"),
+    customButtonDetail: document.getElementById("custom-button-detail"),
+    customActivityClose: document.getElementById("custom-activity-close"),
+    customActivityNew: document.getElementById("custom-activity-new"),
+    customActivityDelete: document.getElementById("custom-activity-delete"),
+    customActivityStatus: document.getElementById("custom-activity-status"),
     activityTitle: document.getElementById("activity-title"),
     activityDetail: document.getElementById("activity-detail"),
     activityUpdated: document.getElementById("activity-updated"),
     boardNote: document.getElementById("board-note"),
+    boardSort: document.getElementById("board-sort"),
+    boardFilter: document.getElementById("board-filter"),
+    boardExpand: document.getElementById("board-expand"),
     presetSelect: document.getElementById("preset-select"),
     extraFields: document.getElementById("extra-fields"),
     taskForm: document.getElementById("task-form"),
-    taskAuthor: document.getElementById("task-author"),
     submitStatus: document.getElementById("submit-status"),
     taskList: document.getElementById("task-list"),
     doneDrawer: document.getElementById("done-drawer"),
     doneToggle: document.getElementById("done-toggle"),
+    archiveToggle: document.getElementById("archive-toggle"),
     doneToggleMeta: document.getElementById("done-toggle-meta"),
     doneList: document.getElementById("done-list"),
     donePanel: document.getElementById("done-panel"),
     taskTemplate: document.getElementById("task-card-template"),
     fabShell: document.getElementById("fab-shell"),
     fabPanel: document.getElementById("fab-panel"),
+    fabClear: document.getElementById("fab-clear"),
     fabBack: document.getElementById("fab-back"),
     fabToggle: document.getElementById("fab-toggle"),
 };
@@ -68,15 +84,106 @@ const state = {
     user: null,
     accounts: [],
     accountPanelMode: "signin",
-    showingDone: false
+    showingDone: false,
+    boardSort: "newest",
+    boardFilter: "all",
+    boardExpanded: false,
+    archiveExpanded: false,
+    customActivityButtons: [],
+    editingCustomActivityId: "",
+    pendingSignin: null
 };
 
 const AUTO_REFRESH_MS = 10000;
+const PENDING_SIGNIN_MS = 5000;
 
 function getWorkerCodeFromUrl() {
     const params = new URLSearchParams(window.location.search);
     const requested = (params.get("worker") || appConfig.defaultWorker || "").toUpperCase();
     return appConfig.workers[requested] ? requested : appConfig.defaultWorker;
+}
+
+function cloneWorkerConfig(source, code) {
+    const cloned = JSON.parse(JSON.stringify(source || {}));
+    return {
+        ...cloned,
+        code,
+        title: `${code} Task Board`,
+        description: `Task board for ${code}.`
+    };
+}
+
+function ensureWorkerConfig(code) {
+    const normalizedCode = String(code || "").trim().toUpperCase();
+    if (!/^[A-Z0-9]{4}$/.test(normalizedCode)) {
+        return;
+    }
+
+    const template = appConfig.workers[appConfig.defaultWorker] || Object.values(appConfig.workers)[0];
+    if (!template || appConfig.workers[normalizedCode]) {
+        return;
+    }
+
+    appConfig.workers[normalizedCode] = cloneWorkerConfig(template, normalizedCode);
+}
+
+async function hydrateWorkerConfigs() {
+    if (appConfig.storageMode !== "cloudflare" || !appConfig.apiBaseUrl) {
+        return;
+    }
+
+    const template = appConfig.workers[appConfig.defaultWorker] || Object.values(appConfig.workers)[0];
+    if (!template) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${appConfig.apiBaseUrl.replace(/\/+$/, "")}/api/workers`, {
+            cache: "no-store"
+        });
+        if (!response.ok) {
+            throw new Error("Workers request failed.");
+        }
+        const payload = await response.json();
+        const workerCodes = new Set();
+        (payload?.workers || []).forEach(worker => {
+            const code = String(worker.code || "").trim().toUpperCase();
+            if (!/^[A-Z0-9]{4}$/.test(code)) {
+                return;
+            }
+            workerCodes.add(code);
+            appConfig.workers[code] = {
+                ...cloneWorkerConfig(template, code),
+                ...(appConfig.workers[code] || {}),
+                code,
+                title: worker.title || `${code} Task Board`
+            };
+        });
+        Object.keys(appConfig.workers).forEach(code => {
+            if (!configuredWorkerCodes.has(code) && !workerCodes.has(code)) {
+                delete appConfig.workers[code];
+            }
+        });
+    } catch (error) {
+        console.error(error);
+    }
+}
+
+async function refreshWorkerHeader() {
+    await hydrateWorkerConfigs();
+    renderWorkerHeader();
+}
+
+function removeWorkerConfig(code) {
+    const normalizedCode = String(code || "").trim().toUpperCase();
+    if (!configuredWorkerCodes.has(normalizedCode)) {
+        delete appConfig.workers[normalizedCode];
+    }
+    if (state.workerCode === normalizedCode && appConfig.workers[appConfig.defaultWorker]) {
+        window.location.href = `workerboard.html?worker=${encodeURIComponent(appConfig.defaultWorker)}`;
+        return;
+    }
+    renderWorkerHeader();
 }
 
 function escapeText(value) {
@@ -88,7 +195,7 @@ function normalizeAccountCode(value) {
 }
 
 function renderLinkedText(element, value) {
-    const text = String(value || "");
+    const text = formatTaskDisplayText(value);
     const urlPattern = /\bhttps?:\/\/[^\s<>"']+|\bwww\.[^\s<>"']+/gi;
     let cursor = 0;
     element.replaceChildren();
@@ -212,6 +319,58 @@ function setStatusMessage(element, message, isError = false) {
     element.style.color = isError ? "var(--danger)" : "var(--muted)";
 }
 
+function isPendingApprovalError(error) {
+    return /waiting for admin approval/i.test(error?.message || "");
+}
+
+function stopPendingSignin() {
+    if (state.pendingSignin?.timer) {
+        window.clearInterval(state.pendingSignin.timer);
+    }
+    state.pendingSignin = null;
+}
+
+function startPendingSignin(provider, code, password) {
+    stopPendingSignin();
+    ensureWorkerConfig(code);
+    renderWorkerHeader();
+
+    const attemptSignin = async () => {
+        if (!state.pendingSignin || state.user) {
+            stopPendingSignin();
+            return;
+        }
+
+        try {
+            await provider.login(code, password);
+            elements.requestPassword.value = "";
+            setStatusMessage(elements.requestStatus, "Approved. Signed in.");
+            stopPendingSignin();
+            if (state.workerCode !== code && appConfig.workers[code]) {
+                window.location.href = `workerboard.html?worker=${encodeURIComponent(code)}`;
+            }
+        } catch (error) {
+            if (isPendingApprovalError(error)) {
+                setStatusMessage(elements.requestStatus, "Request sent. Waiting for approval...");
+                return;
+            }
+
+            stopPendingSignin();
+            await refreshWorkerHeader();
+            renderAccountState();
+            setStatusMessage(elements.requestStatus, error.message, true);
+        }
+    };
+
+    state.pendingSignin = {
+        code,
+        timer: window.setInterval(attemptSignin, PENDING_SIGNIN_MS)
+    };
+    state.accountPanelMode = "request";
+    renderAccountState();
+    attemptSignin();
+}
+
 function createEmptyState(message) {
     const empty = document.createElement("div");
     empty.className = "empty-state";
@@ -227,12 +386,15 @@ function createInlineEmptyState(message) {
 }
 
 function setAccountPanelMode(mode) {
+    const isPending = Boolean(state.pendingSignin && !state.user);
     state.accountPanelMode = mode;
-    elements.accountForm.classList.toggle("hidden", mode !== "signin");
-    elements.accountRequestForm.classList.toggle("hidden", mode !== "request");
+    elements.accountForm.classList.toggle("hidden", isPending || mode !== "signin");
+    elements.accountRequestForm.classList.toggle("hidden", isPending || mode !== "request");
     elements.accountAdminPanel.classList.toggle("hidden", mode !== "admin" || !state.user?.isAdmin);
     if (!state.user) {
-        elements.accountSummary.textContent = mode === "request"
+        elements.accountSummary.textContent = isPending
+            ? `${state.pendingSignin.code} account pending approval.`
+            : mode === "request"
             ? "Request access with your 4 letter code."
             : "Sign in to manage tasks and activity.";
     }
@@ -243,7 +405,7 @@ function setAccountPanelOpen(isOpen, mode = state.accountPanelMode) {
         setAccountPanelMode(mode);
     }
     elements.accountPanel.classList.toggle("hidden", !isOpen);
-    elements.accountToggle.setAttribute("aria-expanded", String(isOpen && mode === "signin"));
+    elements.accountToggle.setAttribute("aria-expanded", String(isOpen && (mode === "signin" || Boolean(state.pendingSignin && !state.user && mode === "request"))));
     elements.accountRequestToggle.setAttribute("aria-expanded", String(isOpen && mode === "request"));
     elements.accountAdminToggle.setAttribute("aria-expanded", String(isOpen && mode === "admin"));
 }
@@ -264,6 +426,43 @@ function setFabHover(isHovering) {
     elements.fabShell.classList.toggle("is-hover", isHovering);
 }
 
+function hasTaskDraft() {
+    return Array.from(elements.extraFields.querySelectorAll("[data-extra-field-id]"))
+        .some(input => {
+            const value = escapeText(input.value);
+            const defaultValue = escapeText(input.dataset.extraFieldDefault);
+            return value && value !== defaultValue;
+        });
+}
+
+function updateFabDraftLock() {
+    const hasDraft = hasTaskDraft();
+    elements.fabShell.classList.toggle("is-hover-locked", hasDraft);
+    if (hasDraft) {
+        setFabOpen(true);
+        elements.fabShell.classList.add("is-hover");
+    }
+    return hasDraft;
+}
+
+function closeFab(options = {}) {
+    if (!options.force && updateFabDraftLock()) {
+        return false;
+    }
+
+    elements.fabShell.classList.remove("is-hover-locked");
+    setFabOpen(false);
+    setFabHover(false);
+    return true;
+}
+
+function clearTaskDraft() {
+    elements.taskForm.reset();
+    populatePresetOptions();
+    setStatusMessage(elements.submitStatus, "");
+    elements.fabShell.classList.remove("is-hover-locked");
+}
+
 function setDoneDrawerOpen(isOpen) {
     state.showingDone = isOpen;
     document.body.classList.toggle("is-showing-done", isOpen);
@@ -272,7 +471,7 @@ function setDoneDrawerOpen(isOpen) {
 
 function renderWorkerHeader() {
     const worker = state.workerConfig;
-    elements.workerCodeHeader.textContent = worker.code;
+    elements.workerCodeHeader.textContent = "board";
     elements.workerCodeFeed.textContent = worker.code;
 
     elements.workerNav.innerHTML = "";
@@ -306,6 +505,53 @@ function populatePresetOptions() {
 
     elements.presetSelect.onchange = updateExtraFields;
     updateExtraFields();
+}
+
+function setBoardExpanded(isExpanded) {
+    state.boardExpanded = isExpanded;
+    if (!isExpanded) {
+        state.archiveExpanded = false;
+    }
+    document.body.classList.toggle("is-board-expanded", isExpanded);
+    document.body.classList.toggle("is-archive-expanded", state.archiveExpanded);
+    elements.boardExpand.textContent = isExpanded ? "Exit" : "Expand";
+    elements.boardExpand.setAttribute("aria-expanded", String(isExpanded));
+}
+
+function setArchiveExpanded(isExpanded, provider) {
+    state.archiveExpanded = isExpanded;
+    setBoardExpanded(isExpanded);
+    renderTasks(provider);
+}
+
+function formatTaskDisplayText(value) {
+    return String(value || "")
+        .replaceAll("Delivery report new shipment", "Arrival report new shipment")
+        .replaceAll("Location (optional):", "Location:")
+        .replaceAll("Order number (optional):", "Order number:")
+        .replaceAll("Claim number (if there is one already):", "Claim number:");
+}
+
+function populateBoardFilterOptions() {
+    const options = state.workerConfig.presetOptions || [];
+    elements.boardFilter.innerHTML = "";
+
+    const allOption = document.createElement("option");
+    allOption.value = "all";
+    allOption.textContent = "All";
+    elements.boardFilter.appendChild(allOption);
+
+    options.forEach(option => {
+        const item = document.createElement("option");
+        item.value = option.id;
+        item.textContent = formatTaskDisplayText(option.label);
+        elements.boardFilter.appendChild(item);
+    });
+
+    if (!options.some(option => option.id === state.boardFilter)) {
+        state.boardFilter = "all";
+    }
+    elements.boardFilter.value = state.boardFilter;
 }
 
 function getCurrentExtraFieldValues() {
@@ -467,34 +713,193 @@ function renderActivity() {
         : (activity.updatedAt ? `Updated ${formatTimestamp(activity.updatedAt)}` : "");
     elements.activityUnpin.classList.toggle("hidden", !canUnpinActivity);
     elements.activityComplete.classList.toggle("hidden", !canCompleteActivity);
-    elements.activityRoutine.classList.toggle("hidden", !canManage);
-    elements.activityLunch.classList.toggle("hidden", !canManage);
-    elements.activityLunch.textContent = "I'm on lunch";
-    elements.activityLunch.classList.remove("button-danger");
-    elements.activityLunch.classList.add("button-secondary");
+    elements.quickActivityActions.classList.toggle("hidden", !canManage);
+    elements.customActivityAdd.classList.toggle("hidden", !canManage);
 }
 
 function canManageCurrentBoard() {
     return Boolean(state.user?.isAdmin || state.user?.workerCode === state.workerCode);
 }
 
+function getPostingAuthor() {
+    if (!state.user) {
+        return "";
+    }
+    return state.user.isAdmin ? state.workerCode : state.user.user;
+}
+
+function getCustomActivityStorageKey() {
+    const user = state.user?.user || "signed-out";
+    return `sw-worker-board:${state.workerCode}:${user}:custom-activity-buttons`;
+}
+
+function getCustomActivityMigrationKey() {
+    return `${getCustomActivityStorageKey()}:defaults-added`;
+}
+
+function getDefaultCustomActivityButtons() {
+    return [
+        {
+            id: "default-lunch",
+            label: "I'm on lunch",
+            title: "On lunch",
+            detail: `${state.workerCode} is on lunch right now.`
+        },
+        {
+            id: "default-routine",
+            label: "Daily routine",
+            title: "Daily routine",
+            detail: `${state.workerCode} is doing their daily routine right now.`
+        }
+    ];
+}
+
+function loadCustomActivityButtons() {
+    if (!state.user) {
+        state.customActivityButtons = [];
+        renderCustomActivityButtons();
+        return;
+    }
+
+    try {
+        const stored = window.localStorage.getItem(getCustomActivityStorageKey());
+        let parsed = stored ? JSON.parse(stored) : getDefaultCustomActivityButtons();
+        if (stored && !window.localStorage.getItem(getCustomActivityMigrationKey())) {
+            const defaults = getDefaultCustomActivityButtons();
+            const existingIds = new Set(parsed.map(button => button.id));
+            parsed = [
+                ...defaults.filter(button => !existingIds.has(button.id)),
+                ...parsed
+            ];
+            window.localStorage.setItem(getCustomActivityMigrationKey(), "true");
+            window.localStorage.setItem(getCustomActivityStorageKey(), JSON.stringify(parsed));
+        }
+        state.customActivityButtons = Array.isArray(parsed)
+            ? parsed.filter(button => button?.label && button?.title).slice(0, 8)
+            : [];
+    } catch {
+        state.customActivityButtons = [];
+    }
+    renderCustomActivityButtons();
+}
+
+function saveCustomActivityButtons() {
+    if (!state.user) {
+        return;
+    }
+    window.localStorage.setItem(getCustomActivityStorageKey(), JSON.stringify(state.customActivityButtons));
+}
+
+function renderCustomActivityButtons() {
+    elements.customActivityButtons.innerHTML = "";
+    state.customActivityButtons.forEach(button => {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = "button button-secondary custom-activity-button";
+        item.textContent = button.label;
+        item.dataset.customActivityId = button.id;
+        elements.customActivityButtons.appendChild(item);
+    });
+    renderCustomActivityEditorList();
+}
+
+async function applyQuickActivity(provider, title, detail) {
+    const currentTask = state.tasks.find(task => task.status === "doing");
+    if (currentTask) {
+        await provider.updateTask(currentTask.id, { status: "open" }, { suppressRefresh: true });
+    }
+    await provider.updateActivity({ title, detail }, { suppressRefresh: true });
+    await provider.refresh();
+}
+
+function setCustomActivityPanelOpen(isOpen) {
+    elements.customActivityPanel.classList.toggle("hidden", !isOpen);
+    if (isOpen) {
+        renderCustomActivityEditorList();
+        if (!state.editingCustomActivityId) {
+            startNewCustomActivity();
+        }
+        elements.customButtonLabel.focus();
+    }
+}
+
+function startNewCustomActivity() {
+    state.editingCustomActivityId = "";
+    elements.customButtonLabel.value = "";
+    elements.customButtonTitle.value = "";
+    elements.customButtonDetail.value = "";
+    elements.customActivityDelete.classList.add("hidden");
+    setStatusMessage(elements.customActivityStatus, "");
+    renderCustomActivityEditorList();
+}
+
+function editCustomActivityButton(id) {
+    const button = state.customActivityButtons.find(item => item.id === id);
+    if (!button) {
+        startNewCustomActivity();
+        return;
+    }
+    state.editingCustomActivityId = button.id;
+    elements.customButtonLabel.value = button.label;
+    elements.customButtonTitle.value = button.title;
+    elements.customButtonDetail.value = button.detail || "";
+    elements.customActivityDelete.classList.remove("hidden");
+    setStatusMessage(elements.customActivityStatus, "");
+    renderCustomActivityEditorList();
+}
+
+function renderCustomActivityEditorList() {
+    if (!elements.customActivityList) {
+        return;
+    }
+    elements.customActivityList.innerHTML = "";
+    state.customActivityButtons.forEach(button => {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = "custom-activity-list-item";
+        item.classList.toggle("active", button.id === state.editingCustomActivityId);
+        item.setAttribute("aria-selected", String(button.id === state.editingCustomActivityId));
+        item.dataset.customEditId = button.id;
+        item.textContent = button.label;
+        elements.customActivityList.appendChild(item);
+    });
+}
+
+function getTaskAuthorLabel(task) {
+    const author = String(task.author || "").trim();
+    if (!author) {
+        return "account";
+    }
+    if (author.toLowerCase() === "brboherbo") {
+        return task.workerCode || state.workerCode;
+    }
+    return author;
+}
+
 function renderAccountState() {
     const signedIn = Boolean(state.user);
     const isAdmin = Boolean(state.user?.isAdmin);
+    const isPending = Boolean(state.pendingSignin && !signedIn);
 
-    elements.accountToggle.textContent = signedIn ? "Account" : "Sign in";
-    elements.accountRequestToggle.classList.toggle("hidden", signedIn);
+    elements.accountToggle.textContent = signedIn ? "Account" : (isPending ? "Account pending" : "Sign in");
+    elements.accountRequestToggle.classList.toggle("hidden", signedIn || isPending);
     elements.accountAdminToggle.classList.toggle("hidden", !isAdmin);
     elements.accountSummary.textContent = signedIn
         ? `Signed in as ${state.user.user || "account"}`
+        : isPending
+        ? `${state.pendingSignin.code} account pending approval.`
         : (state.accountPanelMode === "request" ? "Request access with your 4 letter code." : "Sign in to manage tasks and activity.");
 
-    elements.accountEmail.disabled = signedIn;
-    elements.accountPassword.disabled = signedIn;
-    elements.accountSubmit.disabled = signedIn;
+    elements.accountEmail.disabled = signedIn || isPending;
+    elements.accountPassword.disabled = signedIn || isPending;
+    elements.accountSubmit.disabled = signedIn || isPending;
     elements.accountSignout.classList.toggle("hidden", !signedIn);
+    elements.fabShell.classList.toggle("hidden", !signedIn);
     if (!isAdmin && state.accountPanelMode === "admin") {
         state.accountPanelMode = signedIn ? "signin" : "request";
+    }
+    if (isPending) {
+        state.accountPanelMode = "request";
     }
     if (signedIn && state.accountPanelMode === "request") {
         state.accountPanelMode = "signin";
@@ -554,9 +959,13 @@ function renderAccountList() {
         const reject = document.createElement("button");
         reject.type = "button";
         reject.className = "button button-danger";
-        reject.textContent = "Reject";
+        reject.textContent = account.status === "approved" ? "Remove" : "Reject";
         reject.dataset.accountCode = account.code;
-        reject.dataset.accountStatus = "rejected";
+        if (account.status === "approved") {
+            reject.dataset.accountAction = "remove";
+        } else {
+            reject.dataset.accountStatus = "rejected";
+        }
         reject.disabled = account.status === "rejected";
 
         actions.append(approve, reject);
@@ -565,16 +974,20 @@ function renderAccountList() {
     });
 }
 
-async function refreshAccounts(provider) {
+async function refreshAccounts(provider, options = {}) {
     if (!state.user?.isAdmin || typeof provider.listAccounts !== "function") {
         return;
     }
 
-    setStatusMessage(elements.accountAdminStatus, "Loading accounts...");
+    if (!options.silent) {
+        setStatusMessage(elements.accountAdminStatus, "Loading accounts...");
+    }
     try {
         state.accounts = await provider.listAccounts();
         renderAccountList();
-        setStatusMessage(elements.accountAdminStatus, "");
+        if (!options.silent) {
+            setStatusMessage(elements.accountAdminStatus, "");
+        }
     } catch (error) {
         setStatusMessage(elements.accountAdminStatus, error.message, true);
     }
@@ -583,11 +996,19 @@ async function refreshAccounts(provider) {
 function renderTasks(provider) {
     const activeTasks = state.tasks.filter(task => !["done", "archived"].includes(task.status));
     const doneTasks = state.tasks.filter(task => task.status === "done");
+    const archivedTasks = state.tasks.filter(task => task.status === "archived");
+    const visibleActiveTasks = sortBoardTasks(filterBoardTasks(activeTasks));
+    const visibleArchivedTasks = sortBoardTasks(filterBoardTasks(archivedTasks));
     const taskNumbers = buildTaskNumberMap(state.tasks);
 
     elements.boardNote.classList.toggle("hidden", activeTasks.length > 0);
 
-    renderTaskGroup(elements.taskList, activeTasks, provider, taskNumbers, `The ${state.workerCode} board is empty right now. Hit the plus button and pin the first task.`);
+    if (state.archiveExpanded) {
+        elements.boardNote.classList.add("hidden");
+        renderTaskGroup(elements.taskList, visibleArchivedTasks, provider, taskNumbers, "No archived posts yet.");
+    } else {
+        renderTaskGroup(elements.taskList, visibleActiveTasks, provider, taskNumbers, getBoardEmptyMessage(activeTasks.length));
+    }
     elements.doneToggleMeta.textContent = `${doneTasks.length} today`;
 
     if (doneTasks.length > 0) {
@@ -599,6 +1020,49 @@ function renderTasks(provider) {
             setDoneDrawerOpen(false);
         }
     }
+}
+
+function getBoardEmptyMessage(activeCount) {
+    if (activeCount === 0) {
+        return `The ${state.workerCode} board is empty right now. Hit the plus button and pin the first task.`;
+    }
+
+    return "No tasks match this filter.";
+}
+
+function getPriorityRank(priority) {
+    const normalized = String(priority || "Medium").toLowerCase();
+    if (normalized === "high") return 0;
+    if (normalized === "medium") return 1;
+    if (normalized === "low") return 2;
+    return 3;
+}
+
+function getTaskTime(task) {
+    const timestamp = new Date(task.createdAt).getTime();
+    return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function filterBoardTasks(tasks) {
+    if (state.boardFilter === "all") {
+        return tasks;
+    }
+
+    return tasks.filter(task => task.preset === state.boardFilter);
+}
+
+function sortBoardTasks(tasks) {
+    return [...tasks].sort((a, b) => {
+        if (state.boardSort === "oldest") {
+            return getTaskTime(a) - getTaskTime(b);
+        }
+
+        if (state.boardSort === "priority") {
+            return getPriorityRank(a.priority) - getPriorityRank(b.priority) || getTaskTime(b) - getTaskTime(a);
+        }
+
+        return getTaskTime(b) - getTaskTime(a);
+    });
 }
 
 function renderTaskGroup(target, tasks, provider, taskNumbers, emptyMessage = "") {
@@ -618,7 +1082,7 @@ function renderTaskGroup(target, tasks, provider, taskNumbers, emptyMessage = ""
 function createTaskNode(task, provider, taskNumber) {
     const node = elements.taskTemplate.content.firstElementChild.cloneNode(true);
     const options = state.workerConfig.presetOptions || [];
-    const presetLabel = options.find(option => option.id === task.preset)?.label || "Task";
+    const presetLabel = formatTaskDisplayText(options.find(option => option.id === task.preset)?.label || "Task");
     const canManage = canManageCurrentBoard();
     const isArchived = task.status === "archived";
     const isDoing = task.status === "doing";
@@ -629,9 +1093,9 @@ function createTaskNode(task, provider, taskNumber) {
     node.dataset.status = task.status || "open";
     node.querySelector(".task-type").textContent = presetLabel;
     node.querySelector(".task-number").textContent = taskNumber;
-    node.querySelector(".task-title").textContent = task.title;
+    node.querySelector(".task-title").textContent = formatTaskDisplayText(task.title);
     renderLinkedText(node.querySelector(".task-detail"), task.detail || "");
-    node.querySelector(".task-author").textContent = task.author ? `Posted by ${task.author}` : "Posted anonymously";
+    node.querySelector(".task-author").textContent = `Posted by ${getTaskAuthorLabel(task)}`;
     node.querySelector(".task-time").textContent = formatTimestamp(task.createdAt);
 
     const indicatorWrap = node.querySelector(".task-indicator-wrap");
@@ -893,6 +1357,10 @@ class DemoWorkerBoardProvider {
         throw new Error("Account management requires live Cloudflare mode.");
     }
 
+    async deleteAccount() {
+        throw new Error("Account management requires live Cloudflare mode.");
+    }
+
     async logout() {
         return undefined;
     }
@@ -905,14 +1373,16 @@ class CloudflareWorkerBoardProvider {
         this.listeners = new Set();
         this.snapshot = { tasks: [], activity: null };
         this.authListeners = new Set();
-        this.tokenKey = `sw-worker-board:${workerCode}:token`;
-        this.userKey = `sw-worker-board:${workerCode}:user`;
-        this.token = window.localStorage.getItem(this.tokenKey) || "";
+        this.tokenKey = "sw-worker-board:token";
+        this.userKey = "sw-worker-board:user";
+        this.legacyTokenKey = `sw-worker-board:${workerCode}:token`;
+        this.legacyUserKey = `sw-worker-board:${workerCode}:user`;
+        this.token = window.localStorage.getItem(this.tokenKey) || window.localStorage.getItem(this.legacyTokenKey) || "";
         this.user = this.readStoredUser();
     }
 
     readStoredUser() {
-        const stored = window.localStorage.getItem(this.userKey);
+        const stored = window.localStorage.getItem(this.userKey) || window.localStorage.getItem(this.legacyUserKey);
         if (!stored) {
             return null;
         }
@@ -924,22 +1394,31 @@ class CloudflareWorkerBoardProvider {
     }
 
     setSession(token, user) {
+        const previousToken = this.token;
+        const previousUser = this.user ? JSON.stringify(this.user) : "";
+        const nextUser = user || null;
+        const nextUserValue = nextUser ? JSON.stringify(nextUser) : "";
+
         this.token = token || "";
-        this.user = user || null;
+        this.user = nextUser;
 
         if (this.token) {
             window.localStorage.setItem(this.tokenKey, this.token);
         } else {
             window.localStorage.removeItem(this.tokenKey);
+            window.localStorage.removeItem(this.legacyTokenKey);
         }
 
         if (this.user) {
             window.localStorage.setItem(this.userKey, JSON.stringify(this.user));
         } else {
             window.localStorage.removeItem(this.userKey);
+            window.localStorage.removeItem(this.legacyUserKey);
         }
 
-        this.emitAuth();
+        if (this.token !== previousToken || nextUserValue !== previousUser) {
+            this.emitAuth();
+        }
     }
 
     emit() {
@@ -975,23 +1454,15 @@ class CloudflareWorkerBoardProvider {
 
         const payload = response.status === 204 ? null : await response.json().catch(() => null);
         if (!response.ok) {
+            if (response.status === 401 && options.auth) {
+                this.setSession("", null);
+            }
             throw new Error(payload?.error || "Request failed.");
         }
         return payload;
     }
 
-    async refresh() {
-        const [tasksPayload, activityPayload] = await Promise.all([
-            this.request(`/api/workers/${this.workerCode}/tasks`),
-            this.request(`/api/workers/${this.workerCode}/activity`)
-        ]);
-
-        this.snapshot.tasks = tasksPayload?.tasks || [];
-        this.snapshot.activity = activityPayload?.activity || null;
-        this.emit();
-    }
-
-    async init() {
+    async validateSession() {
         if (!this.token) {
             return;
         }
@@ -1006,6 +1477,25 @@ class CloudflareWorkerBoardProvider {
         } catch {
             this.setSession("", null);
         }
+    }
+
+    async refresh() {
+        try {
+            const [tasksPayload, activityPayload] = await Promise.all([
+                this.request(`/api/workers/${this.workerCode}/tasks`),
+                this.request(`/api/workers/${this.workerCode}/activity`)
+            ]);
+
+            this.snapshot.tasks = tasksPayload?.tasks || [];
+            this.snapshot.activity = activityPayload?.activity || null;
+            this.emit();
+        } finally {
+            await this.validateSession();
+        }
+    }
+
+    async init() {
+        await this.validateSession();
     }
 
     subscribe(listener) {
@@ -1029,6 +1519,7 @@ class CloudflareWorkerBoardProvider {
     async addTask(task) {
         await this.request(`/api/workers/${this.workerCode}/tasks`, {
             method: "POST",
+            auth: true,
             body: JSON.stringify(task)
         });
         await this.refresh();
@@ -1099,6 +1590,13 @@ class CloudflareWorkerBoardProvider {
         });
     }
 
+    async deleteAccount(code) {
+        await this.request(`/api/accounts/${encodeURIComponent(code)}`, {
+            method: "DELETE",
+            auth: true
+        });
+    }
+
     async logout() {
         try {
             await this.request("/api/logout", {
@@ -1124,12 +1622,16 @@ async function createProvider() {
 }
 
 async function init() {
+    await hydrateWorkerConfigs();
     state.workerCode = getWorkerCodeFromUrl();
     state.workerConfig = appConfig.workers[state.workerCode];
 
     renderWorkerHeader();
     populatePresetOptions();
+    populateBoardFilterOptions();
     wireSelectField(elements.presetSelect.closest(".field"), elements.presetSelect);
+    wireSelectField(elements.boardSort.closest(".board-control"), elements.boardSort);
+    wireSelectField(elements.boardFilter.closest(".board-control"), elements.boardFilter);
     wireHorizontalWheelScroll(elements.taskList);
     wireHorizontalWheelScroll(elements.doneList);
 
@@ -1161,12 +1663,16 @@ async function init() {
 
     provider.onAuthChange(user => {
         state.user = user;
+        if (user) {
+            stopPendingSignin();
+        }
+        loadCustomActivityButtons();
         if (!user?.isAdmin) {
             state.accounts = [];
         }
         renderAccountState();
         renderTasks(provider);
-        refreshAccounts(provider);
+        refreshAccounts(provider, { silent: true });
     });
 
     elements.taskForm.addEventListener("submit", async event => {
@@ -1174,6 +1680,10 @@ async function init() {
         setStatusMessage(elements.submitStatus, "Posting...");
 
         try {
+            if (!state.user) {
+                throw new Error("Sign in before posting.");
+            }
+
             const title = buildTaskTitle();
 
             const detailLines = getTaskDetailLines();
@@ -1187,15 +1697,13 @@ async function init() {
                 title,
                 priority: getExtraFieldValue("priority") || "Medium",
                 detail: detailLines.join("\n"),
-                author: escapeText(elements.taskAuthor.value)
+                author: getPostingAuthor()
             });
 
             elements.taskForm.reset();
             populatePresetOptions();
             setStatusMessage(elements.submitStatus, `Task posted to ${state.workerCode}.`);
-            elements.fabShell.classList.add("is-hover-locked");
-            setFabOpen(false);
-            setFabHover(false);
+            closeFab({ force: true });
         } catch (error) {
             setStatusMessage(elements.submitStatus, error.message, true);
         }
@@ -1207,15 +1715,24 @@ async function init() {
     });
 
     elements.fabBack.addEventListener("click", () => {
-        elements.fabShell.classList.remove("is-hover-locked");
-        setFabOpen(false);
-        setFabHover(false);
+        closeFab();
     });
+
+    elements.fabClear.addEventListener("click", () => {
+        clearTaskDraft();
+        setFabOpen(true);
+        setFabHover(true);
+    });
+
+    elements.taskForm.addEventListener("input", updateFabDraftLock);
+
+    elements.taskForm.addEventListener("change", updateFabDraftLock);
 
     elements.accountToggle.addEventListener("click", event => {
         event.stopPropagation();
-        const isSameOpen = !elements.accountPanel.classList.contains("hidden") && state.accountPanelMode === "signin";
-        setAccountPanelOpen(!isSameOpen, "signin");
+        const mode = state.pendingSignin && !state.user ? "request" : "signin";
+        const isSameOpen = !elements.accountPanel.classList.contains("hidden") && state.accountPanelMode === mode;
+        setAccountPanelOpen(!isSameOpen, mode);
     });
 
     elements.accountRequestToggle.addEventListener("click", event => {
@@ -1238,6 +1755,26 @@ async function init() {
         setDoneDrawerOpen(!state.showingDone);
     });
 
+    elements.archiveToggle.addEventListener("click", () => {
+        setDoneDrawerOpen(false);
+        setArchiveExpanded(true, provider);
+    });
+
+    elements.boardSort.addEventListener("change", () => {
+        state.boardSort = elements.boardSort.value;
+        renderTasks(provider);
+    });
+
+    elements.boardFilter.addEventListener("change", () => {
+        state.boardFilter = elements.boardFilter.value;
+        renderTasks(provider);
+    });
+
+    elements.boardExpand.addEventListener("click", () => {
+        setBoardExpanded(!state.boardExpanded);
+        renderTasks(provider);
+    });
+
     elements.accountForm.addEventListener("submit", async event => {
         event.preventDefault();
         setStatusMessage(elements.accountStatus, "Signing in...");
@@ -1258,6 +1795,7 @@ async function init() {
     elements.accountRequestForm.addEventListener("submit", async event => {
         event.preventDefault();
         const code = normalizeAccountCode(elements.requestCode.value);
+        const password = elements.requestPassword.value;
         elements.requestCode.value = code;
         setStatusMessage(elements.requestStatus, "Sending request...");
 
@@ -1265,9 +1803,12 @@ async function init() {
             if (code.length !== 4) {
                 throw new Error("Account code must be four letters.");
             }
-            await provider.requestAccount(code, elements.requestPassword.value);
-            elements.requestPassword.value = "";
-            setStatusMessage(elements.requestStatus, "Request sent. It will stay pending until admin approval.");
+            await provider.requestAccount(code, password);
+            ensureWorkerConfig(code);
+            renderWorkerHeader();
+            await refreshWorkerHeader();
+            setStatusMessage(elements.requestStatus, "Request sent. Waiting for approval...");
+            startPendingSignin(provider, code, password);
         } catch (error) {
             setStatusMessage(elements.requestStatus, error.message, true);
         }
@@ -1289,20 +1830,31 @@ async function init() {
     });
 
     elements.accountAdminList.addEventListener("click", async event => {
-        const button = event.target.closest("[data-account-code][data-account-status]");
+        const button = event.target.closest("[data-account-code]");
         if (!button) {
             return;
         }
 
         const code = button.dataset.accountCode;
         const status = button.dataset.accountStatus;
+        const action = button.dataset.accountAction;
         button.disabled = true;
-        setStatusMessage(elements.accountAdminStatus, `${status === "approved" ? "Approving" : "Updating"} ${code}...`);
+        const actionLabel = action === "remove" ? "Removing" : (status === "approved" ? "Approving" : "Updating");
+        setStatusMessage(elements.accountAdminStatus, `${actionLabel} ${code}...`);
 
         try {
-            await provider.updateAccountStatus(code, status);
-            await refreshAccounts(provider);
-            setStatusMessage(elements.accountAdminStatus, `${code} ${status}.`);
+            if (action === "remove") {
+                await provider.deleteAccount(code);
+                removeWorkerConfig(code);
+            } else {
+                await provider.updateAccountStatus(code, status);
+            }
+            await refreshWorkerHeader();
+            if (action === "remove" || status === "rejected") {
+                removeWorkerConfig(code);
+            }
+            await refreshAccounts(provider, { silent: true });
+            setStatusMessage(elements.accountAdminStatus, action === "remove" ? `${code} removed.` : `${code} ${status}.`);
         } catch (error) {
             setStatusMessage(elements.accountAdminStatus, error.message, true);
             button.disabled = false;
@@ -1340,38 +1892,81 @@ async function init() {
         }
     });
 
-    elements.activityLunch.addEventListener("click", async () => {
-        const currentTask = state.tasks.find(task => task.status === "doing");
+    elements.customActivityButtons.addEventListener("click", async event => {
+        const button = event.target.closest("[data-custom-activity-id]");
+        if (!button) {
+            return;
+        }
+
+        const customButton = state.customActivityButtons.find(item => item.id === button.dataset.customActivityId);
+        if (!customButton) {
+            return;
+        }
 
         try {
-            if (currentTask) {
-                await provider.updateTask(currentTask.id, { status: "open" }, { suppressRefresh: true });
-            }
-            await provider.updateActivity({
-                title: "__LUNCH__",
-                detail: `${state.workerCode} is on lunch right now.`
-            }, { suppressRefresh: true });
-            await provider.refresh();
+            await applyQuickActivity(provider, customButton.title, customButton.detail);
         } catch (error) {
             window.alert(error.message);
         }
     });
 
-    elements.activityRoutine.addEventListener("click", async () => {
-        const currentTask = state.tasks.find(task => task.status === "doing");
+    elements.customActivityAdd.addEventListener("click", () => {
+        setCustomActivityPanelOpen(true);
+    });
 
-        try {
-            if (currentTask) {
-                await provider.updateTask(currentTask.id, { status: "open" }, { suppressRefresh: true });
-            }
-            await provider.updateActivity({
-                title: "Daily routine",
-                detail: `${state.workerCode} is doing their daily routine right now.`
-            }, { suppressRefresh: true });
-            await provider.refresh();
-        } catch (error) {
-            window.alert(error.message);
+    elements.customActivityClose.addEventListener("click", () => {
+        setCustomActivityPanelOpen(false);
+    });
+
+    elements.customActivityNew.addEventListener("click", startNewCustomActivity);
+
+    elements.customActivityList.addEventListener("click", event => {
+        const item = event.target.closest("[data-custom-edit-id]");
+        if (item) {
+            editCustomActivityButton(item.dataset.customEditId);
         }
+    });
+
+    elements.customActivityForm.addEventListener("submit", event => {
+        event.preventDefault();
+        const label = escapeText(elements.customButtonLabel.value).slice(0, 18);
+        const title = escapeText(elements.customButtonTitle.value).slice(0, 80);
+        const detail = escapeText(elements.customButtonDetail.value).slice(0, 180);
+
+        if (!label || !title || !detail) {
+            setStatusMessage(elements.customActivityStatus, "Label, header, and subtext are required.", true);
+            return;
+        }
+
+        const nextButton = {
+            id: state.editingCustomActivityId || crypto.randomUUID(),
+            label,
+            title,
+            detail
+        };
+        const existingIndex = state.customActivityButtons.findIndex(button => button.id === nextButton.id);
+        if (existingIndex >= 0) {
+            state.customActivityButtons.splice(existingIndex, 1, nextButton);
+        } else {
+            state.customActivityButtons.push(nextButton);
+        }
+        state.customActivityButtons = state.customActivityButtons.slice(-8);
+        state.editingCustomActivityId = nextButton.id;
+        saveCustomActivityButtons();
+        renderCustomActivityButtons();
+        editCustomActivityButton(nextButton.id);
+        setStatusMessage(elements.customActivityStatus, "Button saved.");
+    });
+
+    elements.customActivityDelete.addEventListener("click", () => {
+        if (!state.editingCustomActivityId) {
+            return;
+        }
+        state.customActivityButtons = state.customActivityButtons.filter(button => button.id !== state.editingCustomActivityId);
+        saveCustomActivityButtons();
+        renderCustomActivityButtons();
+        startNewCustomActivity();
+        setStatusMessage(elements.customActivityStatus, "Button deleted.");
     });
 
     elements.fabToggle.addEventListener("mouseenter", () => {
@@ -1391,8 +1986,9 @@ async function init() {
     });
 
     elements.fabShell.addEventListener("mouseleave", () => {
-        elements.fabShell.classList.remove("is-hover-locked");
-        setFabHover(false);
+        if (!updateFabDraftLock()) {
+            setFabHover(false);
+        }
     });
 
     elements.fabPanel.addEventListener("click", event => {
@@ -1401,9 +1997,7 @@ async function init() {
 
     document.addEventListener("click", event => {
         if (!elements.fabShell.contains(event.target)) {
-            elements.fabShell.classList.remove("is-hover-locked");
-            setFabOpen(false);
-            setFabHover(false);
+            closeFab();
         }
         if (!elements.accountPanel.contains(event.target) && !event.target.closest(".account-toolbar")) {
             setAccountPanelOpen(false);
@@ -1415,9 +2009,11 @@ async function init() {
 
     document.addEventListener("keydown", event => {
         if (event.key === "Escape") {
-            elements.fabShell.classList.remove("is-hover-locked");
-            setFabOpen(false);
-            setFabHover(false);
+            if (state.boardExpanded) {
+                setBoardExpanded(false);
+                renderTasks(provider);
+            }
+            closeFab();
             setAccountPanelOpen(false);
             closeOpenTaskMenus();
         }
@@ -1427,6 +2023,7 @@ async function init() {
     setFabHover(false);
     setAccountPanelOpen(false);
     setDoneDrawerOpen(false);
+    setBoardExpanded(false);
     renderAccountState();
 }
 

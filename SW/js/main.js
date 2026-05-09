@@ -1,4 +1,4 @@
-document.addEventListener("DOMContentLoaded", function() {
+document.addEventListener("DOMContentLoaded", async function() {
     const pages = document.querySelectorAll('.slider');
     let currentPage = 0;
 
@@ -109,35 +109,174 @@ document.addEventListener("DOMContentLoaded", function() {
     const addPartRowButton = document.getElementById("add-part-row");
     const xmlUploadInput = document.getElementById("xml-upload");
     const downloadQrPdfButton = document.getElementById("download-qr-pdf");
+    const signedOutNote = document.getElementById("signed-out-note");
+    const authOnlyElements = Array.from(document.querySelectorAll(".auth-only"));
     const isWorkerSearchPage = window.location.pathname.toLowerCase().includes("workersearch");
-    const WORKER_SEARCH_PASSWORD = "swparts";
     const STOCK_DATA_URL = "data/stock-current.csv";
+    const boardConfig = window.SW_WORKER_BOARD_CONFIG || {};
+    const workerCode = boardConfig.defaultWorker || "BRBO";
+    const apiBaseUrl = (boardConfig.apiBaseUrl || "").replace(/\/+$/, "");
+    const authState = {
+        tokenKey: `sw-worker-board:${workerCode}:token`,
+        userKey: `sw-worker-board:${workerCode}:user`,
+        token: "",
+        user: null,
+        panelMode: "signin"
+    };
     let stockRowsPromise = null;
     let currentOrderNumber = "";
 
-    function unlockWorkerSearch() {
-        if (!isWorkerSearchPage) return true;
-        if (sessionStorage.getItem("workerSearchUnlocked") === "true") return true;
+    const accountElements = {
+        toggle: document.getElementById("account-toggle"),
+        requestToggle: document.getElementById("account-request-toggle"),
+        panel: document.getElementById("account-panel"),
+        summary: document.getElementById("account-summary"),
+        form: document.getElementById("account-form"),
+        email: document.getElementById("account-email"),
+        password: document.getElementById("account-password"),
+        submit: document.getElementById("account-submit"),
+        signout: document.getElementById("account-signout"),
+        status: document.getElementById("account-status"),
+        requestForm: document.getElementById("account-request-form"),
+        requestCode: document.getElementById("request-code"),
+        requestPassword: document.getElementById("request-password"),
+        requestSubmit: document.getElementById("request-submit"),
+        requestStatus: document.getElementById("request-status")
+    };
 
-        const enteredPassword = prompt("Enter worker search password:");
-
-        if (enteredPassword === WORKER_SEARCH_PASSWORD) {
-            sessionStorage.setItem("workerSearchUnlocked", "true");
-            return true;
-        }
-
-        document.body.innerHTML = `
-            <main class="password-denied">
-                <h1 class="headed">Access denied</h1>
-                <p class="medium">Refresh the page to try again.</p>
-            </main>
-        `;
-
-        return false;
+    function setStatusMessage(element, message, isError = false) {
+        if (!element) return;
+        element.textContent = message;
+        element.style.color = isError ? "var(--danger)" : "var(--muted)";
     }
 
-    if (!unlockWorkerSearch()) {
-        return;
+    function normalizeAccountCode(value) {
+        return String(value || "").trim().toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4);
+    }
+
+    function readStoredUser() {
+        try {
+            return JSON.parse(localStorage.getItem(authState.userKey) || "null");
+        } catch {
+            return null;
+        }
+    }
+
+    function setSession(token, user) {
+        authState.token = token || "";
+        authState.user = user || null;
+
+        if (authState.token) {
+            localStorage.setItem(authState.tokenKey, authState.token);
+        } else {
+            localStorage.removeItem(authState.tokenKey);
+        }
+
+        if (authState.user) {
+            localStorage.setItem(authState.userKey, JSON.stringify(authState.user));
+        } else {
+            localStorage.removeItem(authState.userKey);
+        }
+
+        renderAccountState();
+        reloadLoadedPartRows();
+    }
+
+    async function boardRequest(path, options = {}) {
+        if (!apiBaseUrl) {
+            throw new Error("Account sign in requires live board API config.");
+        }
+
+        const headers = {
+            "Content-Type": "application/json",
+            ...(options.headers || {})
+        };
+
+        if (options.auth && authState.token) {
+            headers.Authorization = `Bearer ${authState.token}`;
+        }
+
+        const response = await fetch(`${apiBaseUrl}${path}`, {
+            ...options,
+            headers
+        });
+
+        const payload = response.status === 204 ? null : await response.json().catch(() => null);
+        if (!response.ok) {
+            throw new Error(payload?.error || "Request failed.");
+        }
+
+        return payload;
+    }
+
+    async function initAccountSession() {
+        authState.token = localStorage.getItem(authState.tokenKey) || "";
+        authState.user = readStoredUser();
+        renderAccountState();
+
+        if (!authState.token) {
+            return;
+        }
+
+        try {
+            const session = await boardRequest("/api/session", { auth: true });
+            if (session?.user) {
+                setSession(authState.token, session.user);
+            } else {
+                setSession("", null);
+            }
+        } catch {
+            setSession("", null);
+        }
+    }
+
+    function setAccountPanelMode(mode) {
+        authState.panelMode = mode;
+        accountElements.form?.classList.toggle("hidden", mode !== "signin");
+        accountElements.requestForm?.classList.toggle("hidden", mode !== "request");
+        if (!authState.user && accountElements.summary) {
+            accountElements.summary.textContent = mode === "request"
+                ? "Request access with your 4 letter code."
+                : "Not signed in";
+        }
+    }
+
+    function setAccountPanelOpen(isOpen, mode = authState.panelMode) {
+        if (isOpen) {
+            setAccountPanelMode(mode);
+        }
+        accountElements.panel?.classList.toggle("hidden", !isOpen);
+        accountElements.toggle?.setAttribute("aria-expanded", String(isOpen && mode === "signin"));
+        accountElements.requestToggle?.setAttribute("aria-expanded", String(isOpen && mode === "request"));
+    }
+
+    function renderAccountState() {
+        if (!accountElements.toggle) return;
+
+        const signedIn = Boolean(authState.user);
+        authOnlyElements.forEach(element => {
+            element.classList.toggle("hidden", !signedIn);
+        });
+        if (signedOutNote) {
+            signedOutNote.textContent = signedIn
+                ? "Each row can load a part image, portal link, and current stock locations."
+                : "Each row can load a part image and portal link.";
+        }
+        accountElements.toggle.textContent = signedIn ? "Account" : "Sign in";
+        accountElements.requestToggle?.classList.toggle("hidden", signedIn);
+        if (accountElements.summary) {
+            accountElements.summary.textContent = signedIn
+                ? `Signed in as ${authState.user.user || "account"}`
+                : (authState.panelMode === "request" ? "Request access with your 4 letter code." : "Not signed in");
+        }
+        if (accountElements.email) accountElements.email.disabled = signedIn;
+        if (accountElements.password) accountElements.password.disabled = signedIn;
+        if (accountElements.submit) accountElements.submit.disabled = signedIn;
+        accountElements.signout?.classList.toggle("hidden", !signedIn);
+        if (signedIn && authState.panelMode === "request") {
+            authState.panelMode = "signin";
+        }
+        setAccountPanelMode(authState.panelMode);
     }
 
     async function fetchPart(partNumber) {
@@ -238,7 +377,7 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     async function fetchStockRowsForPart(partNumber) {
-        if (!isWorkerSearchPage) return [];
+        if (!isWorkerSearchPage || !authState.user) return [];
 
         const normalizedPartNumber = partNumber.trim().toUpperCase();
         let rows = [];
@@ -318,6 +457,10 @@ document.addEventListener("DOMContentLoaded", function() {
 
     function renderStockDetails(stockRows) {
         if (!isWorkerSearchPage) return "";
+
+        if (!authState.user) {
+            return "";
+        }
 
         if (stockRows.length === 0) {
             return `<p class="medium"><strong>Stock:</strong> No location/balance found.</p>`;
@@ -505,6 +648,20 @@ document.addEventListener("DOMContentLoaded", function() {
 
         partsList.appendChild(row);
         return { row, input, loadCurrentRow, resultEl };
+    }
+
+    function reloadLoadedPartRows() {
+        if (!partsList) return;
+
+        Array.from(partsList.querySelectorAll(".part-row")).forEach(row => {
+            const input = row.querySelector(".part-input");
+            const resultEl = row.querySelector(".part-result");
+            const value = input?.value.trim().toUpperCase();
+
+            if (value && resultEl && !resultEl.textContent.includes("Enter a part number")) {
+                loadPartIntoRow(value, resultEl);
+            }
+        });
     }
 
     function clearAllRows() {
@@ -695,6 +852,99 @@ document.addEventListener("DOMContentLoaded", function() {
             }
         });
     }
+
+    await initAccountSession();
+
+    if (accountElements.toggle) {
+        accountElements.toggle.addEventListener("click", event => {
+            event.stopPropagation();
+            const isSameOpen = !accountElements.panel.classList.contains("hidden") && authState.panelMode === "signin";
+            setAccountPanelOpen(!isSameOpen, "signin");
+        });
+    }
+
+    if (accountElements.requestToggle) {
+        accountElements.requestToggle.addEventListener("click", event => {
+            event.stopPropagation();
+            const isSameOpen = !accountElements.panel.classList.contains("hidden") && authState.panelMode === "request";
+            setAccountPanelOpen(!isSameOpen, "request");
+        });
+    }
+
+    if (accountElements.form) {
+        accountElements.form.addEventListener("submit", async event => {
+            event.preventDefault();
+            setStatusMessage(accountElements.status, "Signing in...");
+
+            try {
+                const payload = await boardRequest("/api/login", {
+                    method: "POST",
+                    body: JSON.stringify({
+                        user: String(accountElements.email.value || "").trim(),
+                        password: accountElements.password.value,
+                        workerCode
+                    })
+                });
+                accountElements.password.value = "";
+                setSession(payload?.token || "", payload?.user || null);
+                setStatusMessage(accountElements.status, "Signed in.");
+            } catch (error) {
+                setStatusMessage(accountElements.status, error.message, true);
+            }
+        });
+    }
+
+    if (accountElements.requestCode) {
+        accountElements.requestCode.addEventListener("input", () => {
+            accountElements.requestCode.value = normalizeAccountCode(accountElements.requestCode.value);
+        });
+    }
+
+    if (accountElements.requestForm) {
+        accountElements.requestForm.addEventListener("submit", async event => {
+            event.preventDefault();
+            const code = normalizeAccountCode(accountElements.requestCode.value);
+            accountElements.requestCode.value = code;
+            setStatusMessage(accountElements.requestStatus, "Sending request...");
+
+            try {
+                if (code.length !== 4) {
+                    throw new Error("Account code must be four letters.");
+                }
+                await boardRequest("/api/accounts", {
+                    method: "POST",
+                    body: JSON.stringify({
+                        code,
+                        password: accountElements.requestPassword.value
+                    })
+                });
+                accountElements.requestPassword.value = "";
+                setStatusMessage(accountElements.requestStatus, "Request sent. It will stay pending until admin approval.");
+            } catch (error) {
+                setStatusMessage(accountElements.requestStatus, error.message, true);
+            }
+        });
+    }
+
+    if (accountElements.signout) {
+        accountElements.signout.addEventListener("click", async () => {
+            setStatusMessage(accountElements.status, "Signing out...");
+            setSession("", null);
+            setStatusMessage(accountElements.status, "Signed out.");
+        });
+    }
+
+    document.addEventListener("click", event => {
+        if (accountElements.panel && !accountElements.panel.contains(event.target) && !event.target.closest(".account-toolbar")) {
+            setAccountPanelOpen(false);
+        }
+    });
+
+    document.addEventListener("keydown", event => {
+        if (event.key === "Escape") {
+            setAccountPanelOpen(false);
+        }
+    });
 
     if (addPartRowButton) {
         addPartRowButton.addEventListener("click", function() {
