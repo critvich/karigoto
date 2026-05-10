@@ -693,21 +693,20 @@ function renderActivity() {
         updatedAt: null
     };
     const currentTask = state.tasks.find(task => task.status === "doing");
+    const quickActivityTitles = new Set(state.customActivityButtons.map(button => button.title));
     const isOnLunch = activity.title === "__LUNCH__";
-    const isDailyRoutine = activity.title === "Daily routine";
+    const isQuickActivity = quickActivityTitles.has(activity.title);
     const canManage = canManageCurrentBoard();
-    const canUnpinActivity = Boolean(canManage && (currentTask || isOnLunch || isDailyRoutine));
+    const canUnpinActivity = Boolean(canManage && (currentTask || isOnLunch || isQuickActivity));
     const canCompleteActivity = Boolean(canManage && currentTask);
 
     elements.activityTitle.textContent = isOnLunch
         ? "On lunch"
         : (activity.title || `No current ${state.workerCode} activity set`);
-    renderLinkedText(
-        elements.activityDetail,
-        isOnLunch
-            ? (activity.detail || `${state.workerCode} is on lunch right now.`)
-            : (activity.detail || "There is no live activity note posted yet.")
-    );
+    const defaultEmptyDetail = activity.title === `No current ${state.workerCode} activity set`
+        ? "There is no live activity note posted yet."
+        : "";
+    renderLinkedText(elements.activityDetail, activity.detail ?? defaultEmptyDetail);
     elements.activityUpdated.textContent = state.user
         ? ""
         : (activity.updatedAt ? `Updated ${formatTimestamp(activity.updatedAt)}` : "");
@@ -808,7 +807,7 @@ async function applyQuickActivity(provider, title, detail) {
     if (currentTask) {
         await provider.updateTask(currentTask.id, { status: "open" }, { suppressRefresh: true });
     }
-    await provider.updateActivity({ title, detail }, { suppressRefresh: true });
+    await provider.updateActivity({ title, detail: detail || "" }, { suppressRefresh: true });
     await provider.refresh();
 }
 
@@ -1933,8 +1932,8 @@ async function init() {
         const title = escapeText(elements.customButtonTitle.value).slice(0, 80);
         const detail = escapeText(elements.customButtonDetail.value).slice(0, 180);
 
-        if (!label || !title || !detail) {
-            setStatusMessage(elements.customActivityStatus, "Label, header, and subtext are required.", true);
+        if (!label || !title) {
+            setStatusMessage(elements.customActivityStatus, "Label and header are required.", true);
             return;
         }
 
