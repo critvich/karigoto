@@ -1,0 +1,2 @@
+ALTER TABLE tasks ADD COLUMN edited_at TEXT;
+ALTER TABLE tasks ADD COLUMN edited_by TEXT;

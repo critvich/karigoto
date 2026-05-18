@@ -351,8 +351,42 @@ body {
 }
 
 @media (max-width: 720px) {
+    body {
+        padding-bottom: 2rem;
+    }
+
     .search-header {
         grid-template-columns: 1fr;
+    }
+
+    .worker-search-shell {
+        width: min(100% - 1.6rem, 100rem);
+        padding: 1rem 0 2rem;
+    }
+
+    .search-banner {
+        display: grid;
+        gap: 1.2rem;
+    }
+
+    .search-banner .banner-side {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .search-upload {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .search-board {
+        padding: 1.4rem;
+        border-radius: 1.6rem;
+    }
+
+    .search-board .board-heading {
+        gap: 1rem;
+        margin-bottom: 1rem;
     }
 
     .search-actions {
@@ -362,6 +396,101 @@ body {
 
     .search-actions .worker-nav {
         justify-content: flex-start;
+    }
+
+    .search-toolbar {
+        position: sticky;
+        top: 12.2rem;
+        z-index: 12;
+        grid-template-columns: 1fr;
+        gap: 0.8rem;
+        margin: 0 -0.2rem 1rem;
+        padding: 0.8rem 0;
+        background: rgba(0, 0, 0, 0.88);
+        backdrop-filter: blur(12px);
+    }
+
+    .share-panel {
+        gap: 1rem;
+        padding: 1rem;
+        border-radius: 1.3rem;
+    }
+
+    .share-panel .button {
+        width: 100%;
+    }
+
+    #parts-list {
+        gap: 1rem;
+    }
+
+    .content.part-row {
+        padding: 1.2rem;
+        border-radius: 1.4rem;
+    }
+
+    .part-row-controls {
+        gap: 0.8rem;
+    }
+
+    .part-input,
+    #xml-upload,
+    .part-load-btn,
+    .part-remove-btn {
+        min-height: 4.6rem;
+        font-size: 1.45rem;
+    }
+
+    .part-row-controls {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .part-input {
+        grid-column: 1 / -1;
+    }
+
+    .part-load-btn,
+    .part-remove-btn {
+        width: 100%;
+        padding: 1rem 1.2rem;
+    }
+
+    .part-result {
+        min-height: 7rem;
+        padding: 1.2rem;
+        border-radius: 1.2rem;
+    }
+
+    .cropboxwide {
+        max-height: 34vh;
+    }
+
+    .part-image {
+        max-height: 34vh;
+        object-fit: contain;
+    }
+
+    .seconded {
+        font-size: 1.75rem;
+    }
+
+    .medium {
+        font-size: 1.35rem;
+    }
+
+    .stock-details {
+        margin-top: 1.2rem;
+        overflow-x: auto;
+    }
+
+    .stock-table {
+        min-width: 28rem;
+        font-size: 1.25rem;
+    }
+
+    .stock-table th,
+    .stock-table td {
+        padding: 0.75rem 0.8rem;
     }
 
     .fs {

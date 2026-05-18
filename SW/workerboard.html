@@ -187,8 +187,13 @@
                 <span>Subtext</span>
                 <input id="custom-button-detail" type="text" maxlength="180" placeholder="Example: BRBO is on lunch right now.">
             </label>
+            <label class="custom-default-toggle">
+                <input id="custom-button-default-morning" type="checkbox">
+                <span>Default every morning</span>
+            </label>
             <div class="inline-actions">
                 <button id="custom-activity-save" class="button button-primary" type="submit">Save button</button>
+                <button id="custom-activity-set-current" class="button button-secondary" type="button">Set current</button>
                 <button id="custom-activity-delete" class="button button-danger hidden" type="button">Delete</button>
             </div>
             <p id="custom-activity-status" class="form-status" aria-live="polite"></p>
@@ -204,30 +209,35 @@
                     <button type="button" class="task-indicator" aria-label="Task options">
                         <span class="task-indicator-icon" aria-hidden="true">...</span>
                     </button>
-                    <div class="task-menu hidden">
-                        <button type="button" class="button button-secondary task-set-doing">Mark doing</button>
-                        <button type="button" class="button button-secondary task-set-done">Mark done</button>
-                        <button type="button" class="button button-secondary task-edit">Edit task</button>
-                        <button type="button" class="button button-danger task-archive">Archive task</button>
-                        <button type="button" class="button button-danger task-delete hidden">Delete permanently</button>
-                    </div>
                 </div>
             </div>
-            <h3 class="task-title"></h3>
-            <p class="task-detail"></p>
-            <div class="task-meta">
-                <p class="task-author"></p>
-                <p class="task-time"></p>
+            <div class="task-view">
+                <h3 class="task-title"></h3>
+                <p class="task-detail"></p>
+                <div class="task-meta">
+                    <p class="task-author"></p>
+                    <p class="task-time"></p>
+                    <p class="task-edited-author hidden"></p>
+                    <p class="task-edited-time hidden"></p>
+                </div>
+            </div>
+            <div class="task-menu hidden">
+                <button type="button" class="button button-secondary task-set-doing">Mark doing</button>
+                <button type="button" class="button button-secondary task-set-done">Mark done</button>
+                <button type="button" class="button button-secondary task-edit">Edit task</button>
+                <button type="button" class="button button-danger task-archive">Archive task</button>
+                <button type="button" class="button button-danger task-delete hidden">Delete permanently</button>
             </div>
             <form class="edit-form hidden">
-                <label class="field">
+                <label class="field edit-title-field">
                     <span>Edit title</span>
                     <input class="edit-title" type="text" maxlength="80">
                 </label>
-                <label class="field">
+                <label class="field edit-detail-field">
                     <span>Edit detail</span>
                     <textarea class="edit-detail" rows="3" maxlength="280"></textarea>
                 </label>
+                <div class="edit-preset-fields extra-fields"></div>
                 <div class="inline-actions">
                     <button type="submit" class="button button-primary">Save</button>
                     <button type="button" class="button button-secondary edit-cancel">Cancel</button>

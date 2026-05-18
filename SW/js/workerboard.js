@@ -45,8 +45,10 @@ const elements = {
     customButtonLabel: document.getElementById("custom-button-label"),
     customButtonTitle: document.getElementById("custom-button-title"),
     customButtonDetail: document.getElementById("custom-button-detail"),
+    customButtonDefaultMorning: document.getElementById("custom-button-default-morning"),
     customActivityClose: document.getElementById("custom-activity-close"),
     customActivityNew: document.getElementById("custom-activity-new"),
+    customActivitySetCurrent: document.getElementById("custom-activity-set-current"),
     customActivityDelete: document.getElementById("custom-activity-delete"),
     customActivityStatus: document.getElementById("custom-activity-status"),
     activityTitle: document.getElementById("activity-title"),
@@ -91,11 +93,17 @@ const state = {
     archiveExpanded: false,
     customActivityButtons: [],
     editingCustomActivityId: "",
-    pendingSignin: null
+    pendingSignin: null,
+    openTaskMenuId: "",
+    editingTaskId: "",
+    taskEditDrafts: {},
+    morningDefaultApplying: false
 };
 
 const AUTO_REFRESH_MS = 10000;
 const PENDING_SIGNIN_MS = 5000;
+const FAB_COLLAPSE_GUARD_MS = 300;
+let suppressFabToggleUntil = 0;
 
 function getWorkerCodeFromUrl() {
     const params = new URLSearchParams(window.location.search);
@@ -411,7 +419,12 @@ function setAccountPanelOpen(isOpen, mode = state.accountPanelMode) {
 }
 
 function setFabOpen(isOpen) {
+    if (isOpen && Date.now() < suppressFabToggleUntil) {
+        return;
+    }
+
     if (isOpen) {
+        elements.fabShell.classList.remove("is-collapsing");
         elements.fabShell.classList.add("is-open");
     } else {
         elements.fabShell.classList.remove("is-open");
@@ -451,9 +464,30 @@ function closeFab(options = {}) {
     }
 
     elements.fabShell.classList.remove("is-hover-locked");
+    suppressFabToggleUntil = Date.now() + FAB_COLLAPSE_GUARD_MS;
+    elements.fabShell.classList.add("is-collapsing");
     setFabOpen(false);
     setFabHover(false);
+    window.setTimeout(() => {
+        if (!elements.fabShell.classList.contains("is-open")) {
+            elements.fabShell.classList.remove("is-collapsing");
+        }
+    }, FAB_COLLAPSE_GUARD_MS);
     return true;
+}
+
+function isMeaningfullyEdited(task) {
+    if (!task?.editedAt || !task?.createdAt) {
+        return Boolean(task?.editedAt);
+    }
+
+    const editedTime = new Date(task.editedAt).getTime();
+    const createdTime = new Date(task.createdAt).getTime();
+    if (!Number.isFinite(editedTime) || !Number.isFinite(createdTime)) {
+        return Boolean(task.editedAt);
+    }
+
+    return editedTime - createdTime > 1000;
 }
 
 function clearTaskDraft() {
@@ -554,8 +588,8 @@ function populateBoardFilterOptions() {
     elements.boardFilter.value = state.boardFilter;
 }
 
-function getCurrentExtraFieldValues() {
-    return Array.from(elements.extraFields.querySelectorAll("[data-extra-field-id]"))
+function getCurrentExtraFieldValues(container = elements.extraFields) {
+    return Array.from(container.querySelectorAll("[data-extra-field-id]"))
         .reduce((accumulator, input) => {
             accumulator[input.dataset.extraFieldId] = input.value;
             return accumulator;
@@ -588,14 +622,8 @@ function wireSelectField(wrapper, input) {
     });
 }
 
-function renderExtraFields(selectedOption, preservedValues = {}) {
-    const fields = getActiveExtraFields(selectedOption);
-    elements.extraFields.innerHTML = "";
-
-    if (fields.length === 0) {
-        return;
-    }
-
+function renderFieldControls(container, fields, preservedValues = {}, onValuesChange = null) {
+    container.innerHTML = "";
     fields.forEach(field => {
         if (field.visibleIf) {
             const parentValue = preservedValues[field.visibleIf.fieldId];
@@ -623,6 +651,10 @@ function renderExtraFields(selectedOption, preservedValues = {}) {
                 item.textContent = option;
                 input.appendChild(item);
             });
+        } else if (field.type === "textarea") {
+            input = document.createElement("textarea");
+            input.rows = field.rows || 4;
+            input.placeholder = field.placeholder || field.label;
         } else {
             input = document.createElement("input");
             input.type = "text";
@@ -635,19 +667,39 @@ function renderExtraFields(selectedOption, preservedValues = {}) {
         input.value = preservedValues[field.id] || field.defaultValue || "";
         input.addEventListener("change", () => {
             const nextValues = {
-                ...getCurrentExtraFieldValues(),
+                ...getCurrentExtraFieldValues(container),
                 [field.id]: input.value
             };
-            renderExtraFields(selectedOption, nextValues);
+            if (typeof onValuesChange === "function") {
+                onValuesChange(nextValues, true);
+            } else {
+                renderFieldControls(container, fields, nextValues, onValuesChange);
+            }
+        });
+        input.addEventListener("input", () => {
+            if (typeof onValuesChange === "function") {
+                onValuesChange(getCurrentExtraFieldValues(container), false);
+            }
         });
         wrapper.appendChild(input);
         wireSelectField(wrapper, input);
-        elements.extraFields.appendChild(wrapper);
+        container.appendChild(wrapper);
     });
 }
 
-function collectExtraFieldLines() {
-    return Array.from(elements.extraFields.querySelectorAll("[data-extra-field-id]"))
+function renderExtraFields(selectedOption, preservedValues = {}) {
+    const fields = getActiveExtraFields(selectedOption);
+
+    if (fields.length === 0) {
+        elements.extraFields.innerHTML = "";
+        return;
+    }
+
+    renderFieldControls(elements.extraFields, fields, preservedValues);
+}
+
+function collectExtraFieldLines(container = elements.extraFields) {
+    return Array.from(container.querySelectorAll("[data-extra-field-id]"))
         .map(input => {
             const value = escapeText(input.value);
             if (!value) return "";
@@ -657,11 +709,20 @@ function collectExtraFieldLines() {
 }
 
 function getTaskDetailLines() {
+    if (elements.presetSelect.value === "misc") {
+        const body = getExtraFieldValue("misc-body");
+        return body ? [body] : [];
+    }
+
     return collectExtraFieldLines()
         .filter(line => !line.startsWith("Priority:"));
 }
 
 function hasMeaningfulTaskDetail() {
+    if (elements.presetSelect.value === "misc") {
+        return Boolean(getExtraFieldValue("misc-header") && getExtraFieldValue("misc-body"));
+    }
+
     return Array.from(elements.extraFields.querySelectorAll("[data-extra-field-id]"))
         .some(input => {
             const value = escapeText(input.value);
@@ -681,7 +742,51 @@ function getExtraFieldValue(fieldId) {
     return input ? escapeText(input.value) : "";
 }
 
+function normalizeFieldLabel(value) {
+    return formatTaskDisplayText(value)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, " ")
+        .trim();
+}
+
+function parseTaskDetailFieldValues(task, presetOption) {
+    const values = {
+        priority: task.priority || "Medium"
+    };
+    const fields = getActiveExtraFields(presetOption);
+    const fieldsByLabel = new Map(fields.map(field => [normalizeFieldLabel(field.label), field]));
+
+    String(task.detail || "")
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(Boolean)
+        .forEach(line => {
+            const separatorIndex = line.indexOf(":");
+            if (separatorIndex < 0) {
+                return;
+            }
+            const label = normalizeFieldLabel(line.slice(0, separatorIndex));
+            const field = fieldsByLabel.get(label);
+            if (!field) {
+                return;
+            }
+            values[field.id] = line.slice(separatorIndex + 1).trim();
+        });
+
+    return values;
+}
+
+function buildTaskDetailFromFieldContainer(container) {
+    return collectExtraFieldLines(container)
+        .filter(line => !line.startsWith("Priority:"))
+        .join("\n");
+}
+
 function buildTaskTitle() {
+    if (elements.presetSelect.value === "misc") {
+        return getExtraFieldValue("misc-header") || "Misc";
+    }
+
     const selected = state.workerConfig.presetOptions.find(option => option.id === elements.presetSelect.value);
     return selected?.label || "Task";
 }
@@ -696,8 +801,9 @@ function renderActivity() {
     const quickActivityTitles = new Set(state.customActivityButtons.map(button => button.title));
     const isOnLunch = activity.title === "__LUNCH__";
     const isQuickActivity = quickActivityTitles.has(activity.title);
+    const hasCurrentActivity = Boolean(activity.title && activity.title !== `No current ${state.workerCode} activity set`);
     const canManage = canManageCurrentBoard();
-    const canUnpinActivity = Boolean(canManage && (currentTask || isOnLunch || isQuickActivity));
+    const canUnpinActivity = Boolean(canManage && (currentTask || isOnLunch || isQuickActivity || hasCurrentActivity));
     const canCompleteActivity = Boolean(canManage && currentTask);
 
     elements.activityTitle.textContent = isOnLunch
@@ -736,21 +842,44 @@ function getCustomActivityMigrationKey() {
     return `${getCustomActivityStorageKey()}:defaults-added`;
 }
 
+function getMorningDefaultStorageKey() {
+    const user = state.user?.user || "signed-out";
+    return `sw-worker-board:${state.workerCode}:${user}:morning-default-day`;
+}
+
 function getDefaultCustomActivityButtons() {
     return [
         {
             id: "default-lunch",
             label: "I'm on lunch",
             title: "On lunch",
-            detail: `${state.workerCode} is on lunch right now.`
+            detail: `${state.workerCode} is on lunch right now.`,
+            defaultMorning: false
         },
         {
             id: "default-routine",
             label: "Daily routine",
             title: "Daily routine",
-            detail: `${state.workerCode} is doing their daily routine right now.`
+            detail: `${state.workerCode} is doing their daily routine right now.`,
+            defaultMorning: true
         }
     ];
+}
+
+function normalizeCustomActivityButton(button) {
+    if (!button?.label || !button?.title) {
+        return null;
+    }
+
+    return {
+        id: button.id || crypto.randomUUID(),
+        label: String(button.label || "").slice(0, 18),
+        title: String(button.title || "").slice(0, 80),
+        detail: String(button.detail || "").slice(0, 180),
+        defaultMorning: button.defaultMorning === undefined
+            ? button.id === "default-routine"
+            : Boolean(button.defaultMorning)
+    };
 }
 
 function loadCustomActivityButtons() {
@@ -774,7 +903,7 @@ function loadCustomActivityButtons() {
             window.localStorage.setItem(getCustomActivityStorageKey(), JSON.stringify(parsed));
         }
         state.customActivityButtons = Array.isArray(parsed)
-            ? parsed.filter(button => button?.label && button?.title).slice(0, 8)
+            ? parsed.map(normalizeCustomActivityButton).filter(Boolean).slice(0, 8)
             : [];
     } catch {
         state.customActivityButtons = [];
@@ -796,6 +925,7 @@ function renderCustomActivityButtons() {
         item.type = "button";
         item.className = "button button-secondary custom-activity-button";
         item.textContent = button.label;
+        item.classList.toggle("is-morning-default", Boolean(button.defaultMorning));
         item.dataset.customActivityId = button.id;
         elements.customActivityButtons.appendChild(item);
     });
@@ -809,6 +939,118 @@ async function applyQuickActivity(provider, title, detail) {
     }
     await provider.updateActivity({ title, detail: detail || "" }, { suppressRefresh: true });
     await provider.refresh();
+}
+
+function getLocalDayKeyForBrowser(date = new Date()) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
+function getActivityLocalDay(activity) {
+    if (!activity?.updatedAt) {
+        return "";
+    }
+    const date = new Date(activity.updatedAt);
+    if (Number.isNaN(date.getTime())) {
+        return "";
+    }
+    return getLocalDayKeyForBrowser(date);
+}
+
+async function applyMorningDefaultActivity(provider) {
+    if (state.morningDefaultApplying || !state.user || !canManageCurrentBoard()) {
+        return;
+    }
+
+    const defaultButton = state.customActivityButtons.find(button => button.defaultMorning);
+    if (!defaultButton) {
+        return;
+    }
+
+    const today = getLocalDayKeyForBrowser();
+    if (window.localStorage.getItem(getMorningDefaultStorageKey()) === today) {
+        return;
+    }
+
+    if (state.tasks.some(task => task.status === "doing")) {
+        return;
+    }
+
+    if (getActivityLocalDay(state.activity) === today) {
+        return;
+    }
+
+    state.morningDefaultApplying = true;
+    window.localStorage.setItem(getMorningDefaultStorageKey(), today);
+    try {
+        await applyQuickActivity(provider, defaultButton.title, defaultButton.detail);
+    } catch (error) {
+        window.localStorage.removeItem(getMorningDefaultStorageKey());
+        console.error(error);
+    } finally {
+        state.morningDefaultApplying = false;
+    }
+}
+
+async function copyTextToClipboard(text) {
+    const value = String(text || "").trim();
+    if (!value) {
+        return;
+    }
+
+    if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+        return;
+    }
+
+    const textarea = document.createElement("textarea");
+    textarea.value = value;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.left = "-9999px";
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand("copy");
+    document.body.removeChild(textarea);
+}
+
+function renderTaskDetail(element, task) {
+    element.replaceChildren();
+    const lines = String(task.detail || "")
+        .split(/\r?\n/)
+        .map(line => formatTaskDisplayText(line).trim())
+        .filter(Boolean);
+
+    if (task.preset === "misc" || lines.length === 0) {
+        renderLinkedText(element, task.detail || "");
+        return;
+    }
+
+    const list = document.createElement("div");
+    list.className = "task-detail-options";
+    lines.forEach(line => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "task-detail-option";
+        button.textContent = line;
+        button.title = "Copy";
+        const separatorIndex = line.indexOf(":");
+        const copyValue = separatorIndex >= 0 ? line.slice(separatorIndex + 1).trim() || line : line;
+        button.addEventListener("click", async event => {
+            event.stopPropagation();
+            try {
+                await copyTextToClipboard(copyValue);
+                button.classList.add("copied");
+                window.setTimeout(() => button.classList.remove("copied"), 800);
+            } catch (error) {
+                console.error(error);
+            }
+        });
+        list.appendChild(button);
+    });
+    element.appendChild(list);
 }
 
 function setCustomActivityPanelOpen(isOpen) {
@@ -827,6 +1069,7 @@ function startNewCustomActivity() {
     elements.customButtonLabel.value = "";
     elements.customButtonTitle.value = "";
     elements.customButtonDetail.value = "";
+    elements.customButtonDefaultMorning.checked = false;
     elements.customActivityDelete.classList.add("hidden");
     setStatusMessage(elements.customActivityStatus, "");
     renderCustomActivityEditorList();
@@ -842,6 +1085,7 @@ function editCustomActivityButton(id) {
     elements.customButtonLabel.value = button.label;
     elements.customButtonTitle.value = button.title;
     elements.customButtonDetail.value = button.detail || "";
+    elements.customButtonDefaultMorning.checked = Boolean(button.defaultMorning);
     elements.customActivityDelete.classList.remove("hidden");
     setStatusMessage(elements.customActivityStatus, "");
     renderCustomActivityEditorList();
@@ -857,9 +1101,10 @@ function renderCustomActivityEditorList() {
         item.type = "button";
         item.className = "custom-activity-list-item";
         item.classList.toggle("active", button.id === state.editingCustomActivityId);
+        item.classList.toggle("is-morning-default", Boolean(button.defaultMorning));
         item.setAttribute("aria-selected", String(button.id === state.editingCustomActivityId));
         item.dataset.customEditId = button.id;
-        item.textContent = button.label;
+        item.textContent = button.defaultMorning ? `${button.label} default` : button.label;
         elements.customActivityList.appendChild(item);
     });
 }
@@ -873,6 +1118,17 @@ function getTaskAuthorLabel(task) {
         return task.workerCode || state.workerCode;
     }
     return author;
+}
+
+function getTaskEditedByLabel(task) {
+    const editor = String(task.editedBy || "").trim();
+    if (!editor) {
+        return getTaskAuthorLabel(task);
+    }
+    if (editor.toLowerCase() === "brboherbo") {
+        return task.workerCode || state.workerCode;
+    }
+    return editor;
 }
 
 function renderAccountState() {
@@ -1081,11 +1337,16 @@ function renderTaskGroup(target, tasks, provider, taskNumbers, emptyMessage = ""
 function createTaskNode(task, provider, taskNumber) {
     const node = elements.taskTemplate.content.firstElementChild.cloneNode(true);
     const options = state.workerConfig.presetOptions || [];
-    const presetLabel = formatTaskDisplayText(options.find(option => option.id === task.preset)?.label || "Task");
+    const presetOption = options.find(option => option.id === task.preset);
+    const presetLabel = formatTaskDisplayText(presetOption?.label || "Task");
     const canManage = canManageCurrentBoard();
     const isArchived = task.status === "archived";
     const isDoing = task.status === "doing";
     const isDone = task.status === "done";
+    const taskId = String(task.id);
+    const draft = state.taskEditDrafts[taskId] || {};
+    const isEditing = state.editingTaskId === taskId;
+    const isMenuOpen = !isEditing && state.openTaskMenuId === taskId;
 
     node.dataset.priority = task.priority || "Medium";
     node.dataset.manageable = canManage ? "true" : "false";
@@ -1093,16 +1354,28 @@ function createTaskNode(task, provider, taskNumber) {
     node.querySelector(".task-type").textContent = presetLabel;
     node.querySelector(".task-number").textContent = taskNumber;
     node.querySelector(".task-title").textContent = formatTaskDisplayText(task.title);
-    renderLinkedText(node.querySelector(".task-detail"), task.detail || "");
+    renderTaskDetail(node.querySelector(".task-detail"), task);
     node.querySelector(".task-author").textContent = `Posted by ${getTaskAuthorLabel(task)}`;
     node.querySelector(".task-time").textContent = formatTimestamp(task.createdAt);
+    const editedTime = node.querySelector(".task-edited-time");
+    const editedAuthor = node.querySelector(".task-edited-author");
+    if (isMeaningfullyEdited(task)) {
+        editedAuthor.textContent = `Edited by ${getTaskEditedByLabel(task)}`;
+        editedTime.textContent = formatTimestamp(task.editedAt);
+        editedAuthor.classList.remove("hidden");
+        editedTime.classList.remove("hidden");
+    }
 
     const indicatorWrap = node.querySelector(".task-indicator-wrap");
     const indicator = node.querySelector(".task-indicator");
     const menu = node.querySelector(".task-menu");
+    const taskView = node.querySelector(".task-view");
     const editForm = node.querySelector(".edit-form");
     const editTitle = node.querySelector(".edit-title");
     const editDetail = node.querySelector(".edit-detail");
+    const editTitleField = node.querySelector(".edit-title-field");
+    const editDetailField = node.querySelector(".edit-detail-field");
+    const editPresetFields = node.querySelector(".edit-preset-fields");
     const editButton = node.querySelector(".task-edit");
     const archiveButton = node.querySelector(".task-archive");
     const deleteButton = node.querySelector(".task-delete");
@@ -1110,8 +1383,31 @@ function createTaskNode(task, provider, taskNumber) {
     const setDoneButton = node.querySelector(".task-set-done");
     const cancelButton = node.querySelector(".edit-cancel");
 
-    editTitle.value = task.title;
-    editDetail.value = task.detail || "";
+    const isMiscTask = task.preset === "misc";
+    const initialPresetValues = parseTaskDetailFieldValues(task, presetOption);
+    const editValues = draft.fieldValues || initialPresetValues;
+
+    editTitle.value = draft.title ?? task.title;
+    editDetail.value = draft.detail ?? task.detail ?? "";
+    editTitleField.classList.toggle("hidden", !isMiscTask);
+    editDetailField.classList.toggle("hidden", !isMiscTask);
+    editPresetFields.classList.toggle("hidden", isMiscTask);
+
+    if (!isMiscTask) {
+        const presetFields = getActiveExtraFields(presetOption);
+        const renderEditPresetFields = values => {
+            renderFieldControls(editPresetFields, presetFields, values, (nextValues, shouldRerender) => {
+                state.taskEditDrafts[taskId] = {
+                    ...(state.taskEditDrafts[taskId] || {}),
+                    fieldValues: nextValues
+                };
+                if (shouldRerender) {
+                    renderEditPresetFields(nextValues);
+                }
+            });
+        };
+        renderEditPresetFields(editValues);
+    }
 
     if (!canManage) {
         indicator.disabled = true;
@@ -1129,22 +1425,55 @@ function createTaskNode(task, provider, taskNumber) {
     archiveButton.classList.toggle("hidden", isArchived);
     deleteButton.classList.toggle("hidden", !isArchived);
 
+    const setTaskPanelMode = mode => {
+        const showingMenu = mode === "menu";
+        const showingEdit = mode === "edit";
+        taskView.classList.toggle("hidden", showingMenu || showingEdit);
+        menu.classList.toggle("hidden", !showingMenu);
+        editForm.classList.toggle("hidden", !showingEdit);
+        indicatorWrap.classList.toggle("is-open", showingMenu || showingEdit);
+        indicator.setAttribute("aria-expanded", String(showingMenu || showingEdit));
+    };
+
     const closeMenu = () => {
+        if (state.openTaskMenuId === taskId) {
+            state.openTaskMenuId = "";
+        }
         indicatorWrap.classList.remove("is-open");
         menu.classList.add("hidden");
         indicator.setAttribute("aria-expanded", "false");
+        if (state.editingTaskId !== taskId) {
+            taskView.classList.remove("hidden");
+        }
     };
 
     const openMenu = () => {
         closeOpenTaskMenus();
-        indicatorWrap.classList.add("is-open");
-        menu.classList.remove("hidden");
-        indicator.setAttribute("aria-expanded", "true");
+        state.openTaskMenuId = taskId;
+        state.editingTaskId = "";
+        setTaskPanelMode("menu");
     };
+
+    editTitle.addEventListener("input", () => {
+        state.taskEditDrafts[taskId] = {
+            ...(state.taskEditDrafts[taskId] || {}),
+            title: editTitle.value
+        };
+    });
+
+    editDetail.addEventListener("input", () => {
+        state.taskEditDrafts[taskId] = {
+            ...(state.taskEditDrafts[taskId] || {}),
+            detail: editDetail.value
+        };
+    });
 
     indicator.addEventListener("click", event => {
         event.stopPropagation();
-        if (menu.classList.contains("hidden")) {
+        if (state.editingTaskId === taskId) {
+            return;
+        }
+        if (state.openTaskMenuId !== taskId) {
             openMenu();
         } else {
             closeMenu();
@@ -1152,24 +1481,49 @@ function createTaskNode(task, provider, taskNumber) {
     });
 
     editButton.addEventListener("click", () => {
-        editForm.classList.remove("hidden");
-        closeMenu();
+        state.openTaskMenuId = "";
+        state.editingTaskId = taskId;
+        state.taskEditDrafts[taskId] = isMiscTask
+            ? {
+                title: editTitle.value,
+                detail: editDetail.value
+            }
+            : {
+                fieldValues: getCurrentExtraFieldValues(editPresetFields)
+            };
+        setTaskPanelMode("edit");
     });
 
     cancelButton.addEventListener("click", () => {
+        state.editingTaskId = "";
+        delete state.taskEditDrafts[taskId];
         editTitle.value = task.title;
         editDetail.value = task.detail || "";
-        editForm.classList.add("hidden");
+        setTaskPanelMode("");
     });
 
     editForm.addEventListener("submit", async event => {
         event.preventDefault();
         try {
-            await provider.updateTask(task.id, {
-                title: escapeText(editTitle.value) || task.title,
-                detail: escapeText(editDetail.value)
-            });
-            editForm.classList.add("hidden");
+            const patch = isMiscTask
+                ? {
+                    title: escapeText(editTitle.value) || task.title,
+                    detail: escapeText(editDetail.value)
+                }
+                : {
+                    title: presetLabel,
+                    detail: buildTaskDetailFromFieldContainer(editPresetFields),
+                    priority: getCurrentExtraFieldValues(editPresetFields).priority || task.priority || "Medium"
+                };
+
+            if (!patch.detail) {
+                throw new Error(isMiscTask ? "Add a body before saving." : "Add at least one ticket detail before saving.");
+            }
+
+            await provider.updateTask(task.id, patch);
+            state.editingTaskId = "";
+            delete state.taskEditDrafts[taskId];
+            setTaskPanelMode("");
         } catch (error) {
             window.alert(error.message);
         }
@@ -1213,21 +1567,39 @@ function createTaskNode(task, provider, taskNumber) {
     deleteButton.addEventListener("click", async () => {
         try {
             await provider.removeTask(task.id);
+            if (state.editingTaskId === taskId) {
+                state.editingTaskId = "";
+            }
+            delete state.taskEditDrafts[taskId];
             closeMenu();
         } catch (error) {
             window.alert(error.message);
         }
     });
 
+    if (isEditing) {
+        setTaskPanelMode("edit");
+    } else if (isMenuOpen) {
+        setTaskPanelMode("menu");
+    } else {
+        setTaskPanelMode("");
+    }
+
     return node;
 }
 
 function closeOpenTaskMenus() {
+    state.openTaskMenuId = "";
     document.querySelectorAll(".task-indicator-wrap.is-open").forEach(wrapper => {
         wrapper.classList.remove("is-open");
     });
     document.querySelectorAll(".task-menu").forEach(menu => {
         menu.classList.add("hidden");
+    });
+    document.querySelectorAll(".task-card").forEach(card => {
+        if (!card.querySelector(".edit-form:not(.hidden)")) {
+            card.querySelector(".task-view")?.classList.remove("hidden");
+        }
     });
     document.querySelectorAll(".task-indicator[aria-expanded=\"true\"]").forEach(button => {
         button.setAttribute("aria-expanded", "false");
@@ -1640,6 +2012,7 @@ async function init() {
         state.activity = snapshot.activity || null;
         renderActivity();
         renderTasks(provider);
+        applyMorningDefaultActivity(provider);
     });
 
     const refreshBoard = () => {
@@ -1672,6 +2045,7 @@ async function init() {
         renderAccountState();
         renderTasks(provider);
         refreshAccounts(provider, { silent: true });
+        applyMorningDefaultActivity(provider);
     });
 
     elements.taskForm.addEventListener("submit", async event => {
@@ -1687,7 +2061,13 @@ async function init() {
 
             const detailLines = getTaskDetailLines();
             if (!hasMeaningfulTaskDetail()) {
-                setStatusMessage(elements.submitStatus, "Add at least one ticket detail before posting.", true);
+                setStatusMessage(
+                    elements.submitStatus,
+                    elements.presetSelect.value === "misc"
+                        ? "Add a header and body before posting."
+                        : "Add at least one ticket detail before posting.",
+                    true
+                );
                 return;
             }
 
@@ -1710,10 +2090,15 @@ async function init() {
 
     elements.fabToggle.addEventListener("click", event => {
         event.stopPropagation();
+        if (Date.now() < suppressFabToggleUntil) {
+            return;
+        }
         setFabOpen(!elements.fabShell.classList.contains("is-open"));
     });
 
-    elements.fabBack.addEventListener("click", () => {
+    elements.fabBack.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
         closeFab();
     });
 
@@ -1931,6 +2316,7 @@ async function init() {
         const label = escapeText(elements.customButtonLabel.value).slice(0, 18);
         const title = escapeText(elements.customButtonTitle.value).slice(0, 80);
         const detail = escapeText(elements.customButtonDetail.value).slice(0, 180);
+        const defaultMorning = Boolean(elements.customButtonDefaultMorning.checked);
 
         if (!label || !title) {
             setStatusMessage(elements.customActivityStatus, "Label and header are required.", true);
@@ -1941,8 +2327,15 @@ async function init() {
             id: state.editingCustomActivityId || crypto.randomUUID(),
             label,
             title,
-            detail
+            detail,
+            defaultMorning
         };
+        if (defaultMorning) {
+            state.customActivityButtons = state.customActivityButtons.map(button => ({
+                ...button,
+                defaultMorning: button.id === nextButton.id
+            }));
+        }
         const existingIndex = state.customActivityButtons.findIndex(button => button.id === nextButton.id);
         if (existingIndex >= 0) {
             state.customActivityButtons.splice(existingIndex, 1, nextButton);
@@ -1955,6 +2348,27 @@ async function init() {
         renderCustomActivityButtons();
         editCustomActivityButton(nextButton.id);
         setStatusMessage(elements.customActivityStatus, "Button saved.");
+    });
+
+    elements.customActivitySetCurrent.addEventListener("click", async () => {
+        const title = escapeText(elements.customButtonTitle.value).slice(0, 80);
+        const detail = escapeText(elements.customButtonDetail.value).slice(0, 180);
+
+        if (!title) {
+            setStatusMessage(elements.customActivityStatus, "Header is required to set current.", true);
+            return;
+        }
+
+        elements.customActivitySetCurrent.disabled = true;
+        setStatusMessage(elements.customActivityStatus, "Setting current...");
+        try {
+            await applyQuickActivity(provider, title, detail);
+            setStatusMessage(elements.customActivityStatus, "Current activity set.");
+        } catch (error) {
+            setStatusMessage(elements.customActivityStatus, error.message, true);
+        } finally {
+            elements.customActivitySetCurrent.disabled = false;
+        }
     });
 
     elements.customActivityDelete.addEventListener("click", () => {

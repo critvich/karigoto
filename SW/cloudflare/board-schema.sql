@@ -11,7 +11,9 @@ CREATE TABLE IF NOT EXISTS tasks (
   done_day TEXT,
   archived_at TEXT,
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  edited_at TEXT,
+  edited_by TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_tasks_worker_created

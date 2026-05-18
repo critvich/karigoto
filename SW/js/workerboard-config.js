@@ -142,10 +142,16 @@ window.SW_WORKER_BOARD_CONFIG = {
                     titleHint: "Post a misc task",
                     extraFields: [
                         {
-                            id: "misc-notes",
-                            label: "What needs doing?",
+                            id: "misc-header",
+                            label: "Header",
                             type: "text",
-                            placeholder: "Write whatever you want people to know"
+                            placeholder: "Short title"
+                        },
+                        {
+                            id: "misc-body",
+                            label: "Body",
+                            type: "textarea",
+                            placeholder: "Write the details"
                         }
                     ]
                 }

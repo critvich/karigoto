@@ -1158,7 +1158,7 @@ async function listTasks(env, workerCode) {
 
   const { results } = await env.boardbinding
     .prepare(`
-      SELECT id, worker_code, preset, title, detail, author, priority, status, done_at, done_day, archived_at, created_at, updated_at
+      SELECT id, worker_code, preset, title, detail, author, priority, status, done_at, done_day, archived_at, created_at, updated_at, edited_at, edited_by
       FROM tasks
       WHERE worker_code = ?
       ORDER BY datetime(created_at) DESC
@@ -1180,7 +1180,9 @@ async function listTasks(env, workerCode) {
       doneDay: row.done_day,
       archivedAt: row.archived_at,
       createdAt: row.created_at,
-      updatedAt: row.updated_at
+      updatedAt: row.updated_at,
+      editedAt: row.edited_at,
+      editedBy: row.edited_by
     }))
   });
 }
@@ -1232,7 +1234,9 @@ async function createTask(request, env, workerCode) {
       priority,
       status: "open",
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      editedAt: null,
+      editedBy: null
     }
   }, 201);
 }
@@ -1285,6 +1289,16 @@ async function updateTask(request, env, workerCode, taskId) {
   let nextDoneAt = existing.done_at;
   let nextDoneDay = existing.done_day;
   let nextArchivedAt = existing.archived_at;
+  let nextEditedAt = existing.edited_at;
+  let nextEditedBy = existing.edited_by;
+  const hasContentEdit =
+    (patch.title !== undefined && patch.title !== existing.title) ||
+    (patch.detail !== undefined && patch.detail !== existing.detail);
+
+  if (hasContentEdit) {
+    nextEditedAt = now;
+    nextEditedBy = String(auth.session.isAdmin ? workerCode : auth.session.user || "").trim().slice(0, 32);
+  }
 
   if (patch.status === "doing") {
     await env.boardbinding
@@ -1321,10 +1335,12 @@ async function updateTask(request, env, workerCode, taskId) {
         done_at = ?,
         done_day = ?,
         archived_at = ?,
-        updated_at = ?
+        updated_at = ?,
+        edited_at = ?,
+        edited_by = ?
       WHERE id = ? AND worker_code = ?
     `)
-    .bind(nextTitle, nextDetail, nextStatus, nextPriority, nextDoneAt, nextDoneDay, nextArchivedAt, now, taskId, workerCode)
+    .bind(nextTitle, nextDetail, nextStatus, nextPriority, nextDoneAt, nextDoneDay, nextArchivedAt, now, nextEditedAt, nextEditedBy, taskId, workerCode)
     .run();
 
   return json({ ok: true });

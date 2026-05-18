@@ -56,6 +56,8 @@ Apply `SW/cloudflare/display-schema.sql` to the D1 database, or re-run `SW/cloud
 
 If you already created the first display table before the promotional media fields were added, run `SW/cloudflare/display-promo-migration.sql` once on the same D1 database. If you already ran that promotional migration and only need the media browser/playlist additions, run `SW/cloudflare/display-library-migration.sql` once.
 
+If your task board D1 database was created before edited timestamps were added, run `SW/cloudflare/board-migration-edited-at.sql` once on the same D1 database.
+
 The display is built for promotional media. The admin dashboard can upload media, link existing media, curate the loop order, set slide durations, publish promo copy, set CTA text, choose ticker text, and select a display theme.
 
 Uploads require a Cloudflare R2 bucket binding named `MEDIA_BUCKET` on the Worker. Linked media works without R2.
