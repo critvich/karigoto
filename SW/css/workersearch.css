@@ -360,16 +360,20 @@ body {
     }
 
     .search-header .account-panel {
-        position: fixed;
-        left: 0.8rem;
-        right: 0.8rem;
+        position: static;
+        left: auto;
+        right: auto;
         top: auto;
-        bottom: max(0.8rem, env(safe-area-inset-bottom));
-        width: auto;
-        max-height: calc(100svh - 1.6rem);
-        overflow-y: auto;
-        overscroll-behavior: contain;
-        z-index: 60;
+        bottom: auto;
+        width: 100%;
+        max-height: none;
+        margin-top: 0.8rem;
+        overflow: visible;
+        z-index: auto;
+    }
+
+    .search-header .account-panel::before {
+        content: none;
     }
 
     .worker-search-shell {
@@ -515,8 +519,8 @@ body {
 
 @media (max-width: 720px) and (max-height: 620px) {
     .search-header .account-panel {
-        top: 0.8rem;
-        bottom: 0.8rem;
+        top: auto;
+        bottom: auto;
         max-height: none;
     }
 }
