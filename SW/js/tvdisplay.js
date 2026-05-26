@@ -231,7 +231,41 @@ function render(display) {
 
 function getPlayableItems(display) {
     const playlist = Array.isArray(display.playlist) ? display.playlist : [];
-    const playable = playlist.filter(item => item?.url);
+    const playable = playlist.flatMap((slide, slideIndex) => {
+        if (Array.isArray(slide?.mediaItems)) {
+            const mediaItems = slide.mediaItems.filter(media => media?.url);
+            if (mediaItems.length === 0) {
+                return [{
+                    ...slide,
+                    id: slide.id || `slide-${slideIndex}`,
+                    mediaSequenceIndex: 0,
+                    mediaSequenceTotal: 0,
+                    title: slide.title || `Slide ${slideIndex + 1}`,
+                    mediaType: "image",
+                    url: ""
+                }];
+            }
+
+            return mediaItems.map((media, mediaIndex) => ({
+                ...slide,
+                id: `${slide.id || `slide-${slideIndex}`}:${media.id || mediaIndex}`,
+                slideId: slide.id || `slide-${slideIndex}`,
+                mediaId: media.id || "",
+                mediaSequenceIndex: mediaIndex,
+                mediaSequenceTotal: mediaItems.length,
+                title: media.title || slide.title || `Slide ${slideIndex + 1}`,
+                mediaType: media.mediaType || "image",
+                url: media.url || "",
+                durationSeconds: slide.mediaDurationSeconds || slide.durationSeconds || 0
+            }));
+        }
+
+        if (slide?.url) {
+            return [slide];
+        }
+
+        return [];
+    });
     if (playable.length > 0) {
         return playable;
     }
@@ -257,10 +291,13 @@ function getPlaylistKey(playlist) {
     return playlist
         .map(item => [
             item.id || "",
+            item.slideId || "",
+            item.mediaId || "",
             item.url || "",
             item.mediaType || "",
             item.layoutMode || "",
             item.durationSeconds || 0,
+            item.mediaDurationSeconds || 0,
             item.statusLabel || "",
             item.headline || "",
             item.subheadline || "",

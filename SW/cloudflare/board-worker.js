@@ -82,6 +82,10 @@ export default {
       }
 
       const mediaAssetMatch = path.match(/^\/api\/display\/media\/([a-f0-9-]+)$/i);
+      if (mediaAssetMatch && request.method === "PATCH") {
+        return updateMediaAsset(request, env, mediaAssetMatch[1]);
+      }
+
       if (mediaAssetMatch && request.method === "DELETE") {
         return deleteMediaAsset(request, env, mediaAssetMatch[1]);
       }
@@ -968,6 +972,45 @@ async function deleteMediaAsset(request, env, assetId) {
     .run();
 
   return json({ ok: true });
+}
+
+async function updateMediaAsset(request, env, assetId) {
+  const auth = await requireAdmin(request, env);
+  if (!auth.ok) {
+    return auth.response;
+  }
+
+  const body = await readJson(request);
+  const title = normalizeDisplayText(body.title, "", 120);
+  if (!title) {
+    return badRequest("Media title is required.");
+  }
+
+  const existing = await env.boardbinding
+    .prepare("SELECT id FROM media_assets WHERE id = ? LIMIT 1")
+    .bind(assetId)
+    .first();
+
+  if (!existing) {
+    return json({ error: "Media not found." }, 404);
+  }
+
+  await env.boardbinding
+    .prepare("UPDATE media_assets SET title = ? WHERE id = ?")
+    .bind(title, assetId)
+    .run();
+
+  const row = await env.boardbinding
+    .prepare(`
+      SELECT id, title, media_type, source_type, url, mime_type, size_bytes, created_by, created_at
+      FROM media_assets
+      WHERE id = ?
+      LIMIT 1
+    `)
+    .bind(assetId)
+    .first();
+
+  return json({ ok: true, asset: rowToMediaAsset(row) });
 }
 
 async function insertMediaAsset(env, asset, r2Key) {

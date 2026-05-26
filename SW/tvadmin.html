@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SW TV Admin</title>
-    <link rel="icon" type="image/png" href="media/images/blue%20logo.png">
+    <link rel="icon" type="image/png" href="media/images/invert%20logo.png">
     <link rel="stylesheet" href="css/tvdisplay.css">
 </head>
 
@@ -15,7 +15,9 @@
             <p class="display-kicker">SW Display Control</p>
             <h1>TV Dashboard</h1>
         </div>
-        <a class="screen-link" href="tvdisplay.html" target="_blank" rel="noreferrer">Open TV view</a>
+        <div class="admin-header-actions">
+            <a class="screen-link" href="tvdisplay.html" target="_blank" rel="noreferrer">Open TV view</a>
+        </div>
     </header>
 
     <main class="admin-shell">
@@ -39,25 +41,107 @@
             <div class="editor-heading">
                 <div>
                     <p class="display-kicker">Promotional Signage</p>
-                    <h2>Media Dashboard</h2>
+                    <h2>Display Editor</h2>
                 </div>
-                <button id="sign-out" class="button button-secondary" type="button">Sign out</button>
+                <div class="section-actions">
+                    <button id="open-media-browser" class="button button-primary" type="button">Add media</button>
+                    <button id="refresh-display" class="button button-secondary" type="button">Refresh</button>
+                    <button id="sign-out" class="button button-secondary" type="button">Sign out</button>
+                </div>
             </div>
 
-            <section class="media-manager">
-                <div class="manager-column">
+            <section id="loop-view" class="admin-view deck-editor-view">
+                <div class="deck-workspace">
+                    <aside class="slide-rail-panel">
+                        <div class="slide-rail-heading">
+                            <div>
+                                <p class="display-kicker">Loop</p>
+                                <h3>Slides</h3>
+                            </div>
+                            <button id="clear-playlist" class="icon-button" type="button" aria-label="Clear loop" title="Clear loop">×</button>
+                        </div>
+                        <button id="slide-rail-add" class="slide-add-button" type="button">New slide</button>
+                        <div id="playlist-list" class="slide-rail"></div>
+                    </aside>
+
+                    <section class="preview-stage" aria-label="Display preview">
+                        <div class="preview-toolbar">
+                            <div>
+                                <p class="display-kicker">Preview</p>
+                                <h3>Display View</h3>
+                            </div>
+                            <div class="preview-controls">
+                                <button id="preview-prev" class="button button-secondary" type="button">Prev</button>
+                                <p id="preview-counter" class="preview-counter">0 / 0</p>
+                                <button id="preview-next" class="button button-secondary" type="button">Next</button>
+                            </div>
+                        </div>
+
+                        <div id="preview-root" class="loop-preview-screen" data-layout="split">
+                            <section class="loop-preview-hero">
+                                <div id="preview-media-shell" class="loop-preview-media">
+                                    <img id="preview-image" alt="Display preview media">
+                                    <video id="preview-video" muted loop playsinline></video>
+                                    <div id="preview-placeholder" class="loop-preview-placeholder">
+                                        <p class="display-kicker">Promotional Media</p>
+                                        <h4>No slide selected.</h4>
+                                    </div>
+                                </div>
+                                <aside class="loop-preview-copy">
+                                    <p id="preview-status-label" class="display-kicker">Steelwrist Presents</p>
+                                    <h4 id="preview-headline"></h4>
+                                    <p id="preview-subheadline"></p>
+                                    <h5 id="preview-announcement"></h5>
+                                </aside>
+                            </section>
+                            <footer class="loop-preview-ticker">
+                                <p id="preview-ticker"></p>
+                            </footer>
+                        </div>
+                    </section>
+
+                    <aside class="slide-inspector">
+                        <div>
+                            <p class="display-kicker">Selected Slide</p>
+                            <h3>Settings</h3>
+                        </div>
+                        <div id="slide-settings" class="slide-settings"></div>
+                        <form id="display-form" class="display-form">
+                            <label class="field">
+                                <span>Default slide seconds</span>
+                                <input id="slide-duration-seconds" type="number" min="3" max="300" step="1">
+                            </label>
+                            <label class="field field-wide">
+                                <span>Bottom text</span>
+                                <input id="ticker" type="text" maxlength="280">
+                            </label>
+                            <div class="form-actions">
+                                <button class="button button-primary" type="submit">Publish</button>
+                                <p id="save-status" class="form-status" aria-live="polite"></p>
+                            </div>
+                        </form>
+                    </aside>
+                </div>
+            </section>
+
+            <section id="media-view" class="media-browser-panel hidden" aria-modal="true" role="dialog" aria-labelledby="media-browser-title">
+                <div class="media-browser-heading">
                     <div class="section-heading">
                         <div>
                             <p class="display-kicker">Library</p>
-                            <h3>Media Browser</h3>
+                            <h3 id="media-browser-title">Media Browser</h3>
                         </div>
-                        <button id="refresh-media" class="button button-secondary" type="button">Refresh</button>
+                        <div class="section-actions">
+                            <button id="refresh-media" class="button button-secondary" type="button">Refresh</button>
+                            <button id="back-to-loop" class="button button-primary" type="button">Done</button>
+                        </div>
                     </div>
 
+                    <div class="media-browser-tools">
                     <form id="upload-form" class="asset-form">
                         <label class="field">
                             <span>Upload media</span>
-                            <input id="upload-file" type="file" accept="image/*,video/*">
+                            <input id="upload-file" type="file" accept="image/*,video/*" multiple>
                         </label>
                         <label class="field">
                             <span>Upload title</span>
@@ -84,38 +168,12 @@
                         </label>
                         <button class="button button-primary" type="submit">Add Link</button>
                     </form>
+                    </div>
 
                     <p id="media-status" class="form-status" aria-live="polite"></p>
-                    <div id="media-library" class="media-library"></div>
                 </div>
-
-                <div class="manager-column">
-                    <div class="section-heading">
-                        <div>
-                            <p class="display-kicker">Loop</p>
-                            <h3>Curated Playlist</h3>
-                        </div>
-                        <button id="clear-playlist" class="button button-secondary" type="button">Clear</button>
-                    </div>
-                    <div id="playlist-list" class="playlist-list"></div>
-                </div>
+                <div id="media-library" class="media-library media-library-full"></div>
             </section>
-
-            <form id="display-form" class="display-form">
-                <label class="field">
-                    <span>Default slide seconds</span>
-                    <input id="slide-duration-seconds" type="number" min="3" max="300" step="1">
-                </label>
-                <label class="field field-wide">
-                    <span>Bottom text</span>
-                    <input id="ticker" type="text" maxlength="280">
-                </label>
-                <div class="form-actions">
-                    <button class="button button-primary" type="submit">Publish</button>
-                    <button id="refresh-display" class="button button-secondary" type="button">Refresh</button>
-                    <p id="save-status" class="form-status" aria-live="polite"></p>
-                </div>
-            </form>
         </section>
     </main>
 
