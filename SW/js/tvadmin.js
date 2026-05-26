@@ -246,8 +246,9 @@ async function saveDisplay(display) {
             auth: true,
             body: JSON.stringify(display)
         });
-        writeLocalDisplay(payload?.display || display);
-        return payload?.display || display;
+        const savedDisplay = keepNonEmptyPlaylist(display, payload?.display || display);
+        writeLocalDisplay(savedDisplay);
+        return savedDisplay;
     }
 
     const localDisplay = {
@@ -378,7 +379,7 @@ function collectForm() {
 async function loadDisplay() {
     setStatus(elements.saveStatus, "Loading...");
     try {
-        const display = await fetchDisplay();
+        const display = keepNonEmptyPlaylist(readLocalDisplay(), await fetchDisplay());
         writeLocalDisplay(display);
         fillForm(display);
         setStatus(elements.saveStatus, "Loaded latest display.");
@@ -386,6 +387,18 @@ async function loadDisplay() {
         fillForm(readLocalDisplay());
         setStatus(elements.saveStatus, error.message, true);
     }
+}
+
+function keepNonEmptyPlaylist(localDisplay, remoteDisplay) {
+    const localPlaylist = Array.isArray(localDisplay?.playlist) ? localDisplay.playlist : [];
+    const remotePlaylist = Array.isArray(remoteDisplay?.playlist) ? remoteDisplay.playlist : [];
+    if (localPlaylist.length > 0 && remotePlaylist.length === 0) {
+        return {
+            ...remoteDisplay,
+            playlist: localPlaylist
+        };
+    }
+    return remoteDisplay;
 }
 
 function createAssetPreview(asset) {

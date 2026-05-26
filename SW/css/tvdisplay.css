@@ -956,11 +956,12 @@ body {
 }
 
 .media-browser-panel {
-    min-height: calc(100vh - 16rem);
+    min-height: calc(100vh - 3.2rem);
     padding: clamp(1.6rem, 2vw, 2.4rem);
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
     gap: 1.8rem;
+    align-content: start;
 }
 
 .media-browser-heading {
@@ -1019,8 +1020,8 @@ body {
 .media-library-full {
     grid-template-columns: repeat(auto-fill, minmax(30rem, 1fr));
     align-content: start;
-    overflow: auto;
-    padding-right: 0.4rem;
+    overflow: visible;
+    padding-right: 0;
 }
 
 .asset-card,
@@ -1034,7 +1035,7 @@ body {
     min-width: 0;
     display: grid;
     grid-template-columns: 14rem minmax(0, 1fr);
-    overflow: hidden;
+    overflow: visible;
 }
 
 .media-library-full .asset-card {
@@ -1375,6 +1376,9 @@ body {
     inset: 1.6rem;
     z-index: 40;
     min-height: auto;
+    max-height: calc(100vh - 3.2rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
     background: rgba(0, 0, 0, 0.98);
     box-shadow: 0 2rem 8rem rgba(0, 0, 0, 0.72);
 }
@@ -1396,6 +1400,7 @@ body {
 
 .media-library-full .asset-card-body {
     grid-template-columns: 1fr;
+    align-content: start;
 }
 
 .asset-card-body strong,
@@ -1450,6 +1455,7 @@ body {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     justify-content: stretch;
+    margin-top: 0.6rem;
 }
 
 .media-library-full .asset-actions .button {

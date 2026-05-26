@@ -359,6 +359,19 @@ body {
         grid-template-columns: 1fr;
     }
 
+    .search-header .account-panel {
+        position: fixed;
+        left: 0.8rem;
+        right: 0.8rem;
+        top: auto;
+        bottom: max(0.8rem, env(safe-area-inset-bottom));
+        width: auto;
+        max-height: calc(100svh - 1.6rem);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        z-index: 60;
+    }
+
     .worker-search-shell {
         width: min(100% - 1.6rem, 100rem);
         padding: 1rem 0 2rem;
@@ -497,5 +510,13 @@ body {
         max-width: 94vw;
         max-height: 82vh;
         padding: 1rem;
+    }
+}
+
+@media (max-width: 720px) and (max-height: 620px) {
+    .search-header .account-panel {
+        top: 0.8rem;
+        bottom: 0.8rem;
+        max-height: none;
     }
 }

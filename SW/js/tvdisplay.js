@@ -470,14 +470,20 @@ async function refresh() {
 
 window.addEventListener("storage", event => {
     if (event.key === DISPLAY_KEY) {
-        render(readLocalDisplay());
+        if (!(config.storageMode === "cloudflare" && config.apiBaseUrl)) {
+            render(readLocalDisplay());
+        }
     }
 });
 
 window.addEventListener("resize", updateMediaCutout);
 document.fonts?.ready?.then(updateMediaCutout).catch(() => undefined);
 
-render(readLocalDisplay());
+if (config.storageMode === "cloudflare" && config.apiBaseUrl) {
+    render(defaultDisplay);
+} else {
+    render(readLocalDisplay());
+}
 refresh();
 runPerformanceProbe();
 animateBackground();

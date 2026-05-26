@@ -1464,20 +1464,47 @@ function normalizeMediaType(value) {
 function normalizePlaylist(value) {
   const items = Array.isArray(value) ? value : [];
   return items
-    .map(item => ({
-      id: normalizeDisplayText(item?.id, "", 80),
-      title: normalizeDisplayText(item?.title, "", 120),
-      mediaType: normalizeMediaType(item?.mediaType),
-      url: normalizeDisplayText(item?.url, "", 900),
-      durationSeconds: normalizeSlideDuration(item?.durationSeconds || 0, true),
-      layoutMode: normalizeLayoutMode(item?.layoutMode),
-      statusLabel: normalizeDisplayText(item?.statusLabel, "", 34),
-      headline: normalizeDisplayText(item?.headline, "", 92),
-      subheadline: normalizeDisplayText(item?.subheadline, "", 180),
-      announcement: normalizeDisplayText(item?.announcement, "", 220)
-    }))
-    .filter(item => item.id && item.url)
+    .map((item, index) => normalizePlaylistSlide(item, index))
+    .filter(item => item.id)
     .slice(0, 30);
+}
+
+function normalizePlaylistSlide(item, index = 0) {
+  const id = normalizeDisplayText(item?.id || item?.slideId, "", 80) || crypto.randomUUID();
+  const legacyUrl = normalizeDisplayText(item?.url, "", 900);
+  const mediaItems = Array.isArray(item?.mediaItems)
+    ? item.mediaItems.map(normalizeSlideMediaItem).filter(media => media.id && media.url).slice(0, 30)
+    : legacyUrl
+      ? [{
+          id,
+          title: normalizeDisplayText(item?.title, `Media ${index + 1}`, 120),
+          mediaType: normalizeMediaType(item?.mediaType),
+          url: legacyUrl
+        }]
+      : [];
+
+  return {
+    id,
+    title: normalizeDisplayText(item?.title || item?.slideTitle, `Slide ${index + 1}`, 120),
+    mediaItems,
+    mediaDurationSeconds: normalizeSlideDuration(item?.mediaDurationSeconds || 0, true),
+    durationSeconds: normalizeSlideDuration(item?.durationSeconds || 0, true),
+    layoutMode: normalizeLayoutMode(item?.layoutMode),
+    statusLabel: normalizeDisplayText(item?.statusLabel, "", 34),
+    headline: normalizeDisplayText(item?.headline, "", 92),
+    subheadline: normalizeDisplayText(item?.subheadline, "", 180),
+    announcement: normalizeDisplayText(item?.announcement, "", 220)
+  };
+}
+
+function normalizeSlideMediaItem(item) {
+  const id = normalizeDisplayText(item?.id, "", 80) || crypto.randomUUID();
+  return {
+    id,
+    title: normalizeDisplayText(item?.title, "Untitled media", 120),
+    mediaType: normalizeMediaType(item?.mediaType),
+    url: normalizeDisplayText(item?.url, "", 900)
+  };
 }
 
 function normalizeSlideDuration(value, allowZero = false) {
