@@ -7,8 +7,8 @@
         <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0"><title>SW TV Admin</title>
-    <link rel="icon" type="image/png" href="media/images/invert%20logo.png?v=20260526-2">
-    <link rel="stylesheet" href="css/tvdisplay.css?v=20260526-2">
+    <link rel="icon" type="image/png" href="media/images/invert%20logo.png?v=20260527-11">
+    <link rel="stylesheet" href="css/tvdisplay.css?v=20260527-11">
 </head>
 
 <body class="admin-body">
@@ -52,6 +52,28 @@
                 </div>
             </div>
 
+            <section class="slideshow-library-panel slideshow-library-panel-wide">
+                <div class="slideshow-library-heading">
+                    <div>
+                        <p class="display-kicker">Saved</p>
+                        <h3>Slideshows</h3>
+                    </div>
+                    <button id="refresh-slideshows" class="icon-button" type="button" aria-label="Refresh saved slideshows" title="Refresh">Refresh</button>
+                </div>
+                <form id="slideshow-save-form" class="slideshow-save-form">
+                    <label class="field">
+                        <span>Slideshow name</span>
+                        <input id="slideshow-name" type="text" maxlength="120" placeholder="Example: Front loader demo">
+                    </label>
+                    <div class="slideshow-actions">
+                        <button id="save-slideshow" class="button button-secondary" type="submit">Save as new</button>
+                        <button id="update-slideshow" class="button button-secondary" type="button" disabled>Overwrite selected</button>
+                    </div>
+                </form>
+                <div id="slideshow-list" class="slideshow-list"></div>
+                <p id="slideshow-status" class="form-status" aria-live="polite"></p>
+            </section>
+
             <section id="loop-view" class="admin-view deck-editor-view">
                 <div class="deck-workspace">
                     <aside class="slide-rail-panel">
@@ -60,7 +82,7 @@
                                 <p class="display-kicker">Loop</p>
                                 <h3>Slides</h3>
                             </div>
-                            <button id="clear-playlist" class="icon-button" type="button" aria-label="Clear loop" title="Clear loop">×</button>
+                            <button id="clear-playlist" class="icon-button" type="button" aria-label="Clear loop" title="Clear loop">&times;</button>
                         </div>
                         <button id="slide-rail-add" class="slide-add-button" type="button">New slide</button>
                         <div id="playlist-list" class="slide-rail"></div>
@@ -84,6 +106,7 @@
                                 <div id="preview-media-shell" class="loop-preview-media">
                                     <img id="preview-image" alt="Display preview media">
                                     <video id="preview-video" muted loop playsinline></video>
+                                    <div id="preview-media-grid" class="loop-preview-media-grid"></div>
                                     <div id="preview-placeholder" class="loop-preview-placeholder">
                                         <p class="display-kicker">Promotional Media</p>
                                         <h4>No slide selected.</h4>
@@ -179,8 +202,12 @@
         </section>
     </main>
 
-    <script src="js/tvdisplay-config.js?v=20260526-2"></script>
-    <script type="module" src="js/tvadmin.js?v=20260526-2"></script>
+    <div id="media-lightbox" class="media-lightbox hidden" aria-hidden="true">
+        <div id="media-lightbox-content" class="media-lightbox-content"></div>
+    </div>
+
+    <script src="js/tvdisplay-config.js?v=20260527-11"></script>
+    <script type="module" src="js/tvadmin.js?v=20260527-11"></script>
 </body>
 
 </html>

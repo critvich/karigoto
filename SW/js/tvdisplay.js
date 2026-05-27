@@ -47,6 +47,7 @@ const elements = {
     subheadline: document.getElementById("display-subheadline"),
     promoImage: document.getElementById("promo-image"),
     promoVideo: document.getElementById("promo-video"),
+    promoMediaGrid: document.getElementById("promo-media-grid"),
     promoPlaceholder: document.getElementById("promo-placeholder"),
     promoCopy: document.querySelector(".promo-copy"),
     announcement: document.getElementById("display-announcement"),
@@ -246,6 +247,24 @@ function getPlayableItems(display) {
                 }];
             }
 
+            if (shouldShowMediaGroup(slide, mediaItems)) {
+                return [{
+                    ...slide,
+                    id: slide.id || `slide-${slideIndex}`,
+                    slideId: slide.id || `slide-${slideIndex}`,
+                    mediaItems: mediaItems.map(media => ({
+                        ...media,
+                        cropX: clampCropValue(media.cropX),
+                        cropY: clampCropValue(media.cropY),
+                        size: clampMediaSize(media.size),
+                        zoom: clampCropZoom(media.zoom)
+                    })),
+                    mediaType: "group",
+                    url: "",
+                    durationSeconds: slide.durationSeconds || 0
+                }];
+            }
+
             return mediaItems.map((media, mediaIndex) => ({
                 ...slide,
                 id: `${slide.id || `slide-${slideIndex}`}:${media.id || mediaIndex}`,
@@ -256,6 +275,10 @@ function getPlayableItems(display) {
                 title: media.title || slide.title || `Slide ${slideIndex + 1}`,
                 mediaType: media.mediaType || "image",
                 url: media.url || "",
+                cropX: clampCropValue(media.cropX),
+                cropY: clampCropValue(media.cropY),
+                size: clampMediaSize(media.size),
+                zoom: clampCropZoom(media.zoom),
                 durationSeconds: slide.mediaDurationSeconds || slide.durationSeconds || 0
             }));
         }
@@ -287,6 +310,13 @@ function getPlayableItems(display) {
     return [];
 }
 
+function shouldShowMediaGroup(slide, mediaItems) {
+    if (!Array.isArray(mediaItems) || mediaItems.length <= 1) return false;
+    if (slide?.mediaLayout === "side-by-side") return true;
+    if (slide?.mediaLayout === "rotate") return false;
+    return mediaItems.some(media => Number.isFinite(Number(media?.size)) && Number(media.size) !== 100);
+}
+
 function getPlaylistKey(playlist) {
     return playlist
         .map(item => [
@@ -296,12 +326,29 @@ function getPlaylistKey(playlist) {
             item.url || "",
             item.mediaType || "",
             item.layoutMode || "",
+            item.mediaLayout || "",
+            item.mediaSide || "",
+            item.mediaPercent || 68,
             item.durationSeconds || 0,
             item.mediaDurationSeconds || 0,
             item.statusLabel || "",
             item.headline || "",
             item.subheadline || "",
-            item.announcement || ""
+            item.announcement || "",
+            item.cropX || 50,
+            item.cropY || 50,
+            item.zoom || 120,
+            Array.isArray(item.mediaItems)
+                ? item.mediaItems.map(media => [
+                    media.id || "",
+                    media.url || "",
+                    media.mediaType || "",
+                    media.cropX || 50,
+                    media.cropY || 50,
+                    media.size || 100,
+                    media.zoom || 120
+                ].join("~")).join(",")
+                : ""
         ].join("|"))
         .join("::");
 }
@@ -359,7 +406,25 @@ function runSlideTransition(item) {
 
 function applyMedia(item, mediaUrl, isVideo) {
     elements.root.dataset.layout = getLayoutMode(item);
+    elements.root.dataset.mediaSide = getMediaSide(item);
+    elements.root.style.setProperty("--media-percent", `${clampPercent(item?.mediaPercent, 68)}%`);
+    elements.root.style.setProperty("--text-percent", `${100 - clampPercent(item?.mediaPercent, 68)}%`);
     renderSlideText(item);
+
+    const mediaItems = Array.isArray(item?.mediaItems) ? item.mediaItems.filter(media => media?.url) : [];
+    const isMediaGroup = item?.mediaType === "group" || shouldShowMediaGroup(item, mediaItems);
+    if (isMediaGroup) {
+        renderDisplayMediaGrid(mediaItems);
+        elements.promoPlaceholder.classList.add("hidden");
+        elements.promoMediaGrid.classList.remove("hidden");
+        elements.promoImage.classList.add("hidden");
+        elements.promoVideo.classList.add("hidden");
+        elements.promoImage.removeAttribute("src");
+        elements.promoVideo.removeAttribute("src");
+        return;
+    }
+    elements.promoMediaGrid.classList.add("hidden");
+    elements.promoMediaGrid.replaceChildren();
 
     elements.promoPlaceholder.classList.toggle("hidden", Boolean(mediaUrl));
     elements.promoImage.classList.toggle("hidden", !mediaUrl || isVideo);
@@ -368,6 +433,12 @@ function applyMedia(item, mediaUrl, isVideo) {
     if (!mediaUrl) {
         elements.promoImage.removeAttribute("src");
         elements.promoVideo.removeAttribute("src");
+        elements.promoImage.style.objectPosition = "";
+        elements.promoVideo.style.objectPosition = "";
+        elements.promoImage.style.transform = "";
+        elements.promoVideo.style.transform = "";
+        elements.promoImage.style.transformOrigin = "";
+        elements.promoVideo.style.transformOrigin = "";
         return;
     }
 
@@ -377,6 +448,7 @@ function applyMedia(item, mediaUrl, isVideo) {
             elements.promoVideo.load();
             elements.promoVideo.play().catch(() => undefined);
         }
+        applyCropStyles(elements.promoVideo, item);
         elements.promoImage.removeAttribute("src");
         return;
     }
@@ -385,7 +457,73 @@ function applyMedia(item, mediaUrl, isVideo) {
         elements.promoImage.src = mediaUrl;
     }
     elements.promoImage.alt = item?.title || "Promotional media";
+    applyCropStyles(elements.promoImage, item);
     elements.promoVideo.removeAttribute("src");
+}
+
+function renderDisplayMediaGrid(mediaItems) {
+    elements.promoMediaGrid.replaceChildren();
+    elements.promoMediaGrid.dataset.count = String(mediaItems.length);
+    elements.promoMediaGrid.style.gridTemplateColumns = getMediaGridTemplate(mediaItems);
+    mediaItems.forEach(media => {
+        const cell = document.createElement("div");
+        cell.className = "promo-media-cell";
+        const element = media.mediaType === "video" ? document.createElement("video") : document.createElement("img");
+        if (media.mediaType === "video") {
+            element.muted = true;
+            element.loop = true;
+            element.autoplay = true;
+            element.playsInline = true;
+            element.src = media.url;
+            element.play().catch(() => undefined);
+        } else {
+            element.src = media.url;
+            element.alt = media.title || "Promotional media";
+        }
+        applyCropStyles(element, media);
+        cell.appendChild(element);
+        elements.promoMediaGrid.appendChild(cell);
+    });
+}
+
+function clampCropValue(value) {
+    const number = Number.parseFloat(value);
+    if (Number.isNaN(number)) return 50;
+    return Math.max(0, Math.min(100, number));
+}
+
+function clampPercent(value, fallback = 50) {
+    const number = Number.parseInt(value, 10);
+    if (Number.isNaN(number)) return fallback;
+    return Math.max(25, Math.min(80, number));
+}
+
+function clampMediaSize(value) {
+    const number = Number.parseInt(value, 10);
+    if (Number.isNaN(number)) return 100;
+    return Math.max(25, Math.min(300, number));
+}
+
+function clampCropZoom(value) {
+    const number = Number.parseInt(value, 10);
+    if (Number.isNaN(number)) return 120;
+    return Math.max(100, Math.min(250, number));
+}
+
+function getMediaGridTemplate(mediaItems) {
+    return mediaItems.map(media => `${clampMediaSize(media?.size)}fr`).join(" ");
+}
+
+function getCropPosition(item) {
+    return `${clampCropValue(item?.cropX).toFixed(2)}% ${clampCropValue(item?.cropY).toFixed(2)}%`;
+}
+
+function applyCropStyles(element, item) {
+    if (!element) return;
+    const cropPosition = getCropPosition(item);
+    element.style.objectPosition = cropPosition;
+    element.style.transformOrigin = cropPosition;
+    element.style.transform = `scale(${(clampCropZoom(item?.zoom) / 100).toFixed(3)})`;
 }
 
 function renderSlideText(item) {
@@ -401,19 +539,18 @@ function renderSlideText(item) {
 
 function getLayoutMode(item) {
     const layoutMode = String(item?.layoutMode || "split").trim().toLowerCase();
-    const hasSlideCopy = Boolean(item?.statusLabel || item?.headline || item?.subheadline || item?.announcement);
-    if (layoutMode === "fullscreen" && hasSlideCopy) {
-        return "fullscreen-text";
-    }
-    if (["fullscreen", "fullscreen-text", "split"].includes(layoutMode)) {
-        return layoutMode;
-    }
+    if (layoutMode === "fullscreen-text") return "overlay";
+    if (["fullscreen", "overlay", "split"].includes(layoutMode)) return layoutMode;
     return "split";
+}
+
+function getMediaSide(item) {
+    return String(item?.mediaSide || "left").trim().toLowerCase() === "right" ? "right" : "left";
 }
 
 function updateMediaCutout() {
     window.requestAnimationFrame(() => {
-        const isFullscreenText = elements.root.dataset.layout === "fullscreen-text";
+        const isFullscreenText = ["fullscreen-text", "overlay"].includes(elements.root.dataset.layout);
         const hasSlideCopy = elements.root.classList.contains("has-slide-copy");
         if (!isFullscreenText || !hasSlideCopy || !elements.promoCopy) {
             elements.root.style.setProperty("--copy-cutout-w", "0px");

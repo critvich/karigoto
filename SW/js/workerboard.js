@@ -2168,7 +2168,10 @@ async function init() {
             elements.accountPassword.value = "";
             setStatusMessage(elements.accountStatus, "Signed in.");
         } catch (error) {
-            setStatusMessage(elements.accountStatus, error.message, true);
+            const message = /not allowed|No account request found/i.test(error.message)
+                ? "No account request found. Use Create account first, then wait for admin approval."
+                : error.message;
+            setStatusMessage(elements.accountStatus, message, true);
         }
     });
 

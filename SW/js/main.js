@@ -121,7 +121,8 @@ document.addEventListener("DOMContentLoaded", async function() {
         userKey: `sw-worker-board:${workerCode}:user`,
         token: "",
         user: null,
-        panelMode: "signin"
+        panelMode: "signin",
+        pendingRequestCode: ""
     };
     let stockRowsPromise = null;
     let currentOrderNumber = "";
@@ -267,6 +268,8 @@ document.addEventListener("DOMContentLoaded", async function() {
         if (accountElements.summary) {
             accountElements.summary.textContent = signedIn
                 ? `Signed in as ${authState.user.user || "account"}`
+                : authState.pendingRequestCode
+                    ? `${authState.pendingRequestCode} account pending approval.`
                 : (authState.panelMode === "request" ? "Request access with your 4 letter code." : "Not signed in");
         }
         if (accountElements.email) accountElements.email.disabled = signedIn;
@@ -889,7 +892,10 @@ document.addEventListener("DOMContentLoaded", async function() {
                 setSession(payload?.token || "", payload?.user || null);
                 setStatusMessage(accountElements.status, "Signed in.");
             } catch (error) {
-                setStatusMessage(accountElements.status, error.message, true);
+                const message = /not allowed|No account request found/i.test(error.message)
+                    ? "No account request found. Tap Create account first, then wait for admin approval."
+                    : error.message;
+                setStatusMessage(accountElements.status, message, true);
             }
         });
     }
@@ -919,7 +925,9 @@ document.addEventListener("DOMContentLoaded", async function() {
                     })
                 });
                 accountElements.requestPassword.value = "";
-                setStatusMessage(accountElements.requestStatus, "Request sent. It will stay pending until admin approval.");
+                authState.pendingRequestCode = code;
+                renderAccountState();
+                setStatusMessage(accountElements.requestStatus, "Request sent. Waiting for admin approval before sign in.");
             } catch (error) {
                 setStatusMessage(accountElements.requestStatus, error.message, true);
             }

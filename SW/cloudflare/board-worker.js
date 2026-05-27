@@ -64,6 +64,23 @@ export default {
         return updateDisplayState(request, env);
       }
 
+      if (path === "/api/display/slideshows" && request.method === "GET") {
+        return listDisplaySlideshows(request, env);
+      }
+
+      if (path === "/api/display/slideshows" && request.method === "POST") {
+        return createDisplaySlideshow(request, env);
+      }
+
+      const slideshowMatch = path.match(/^\/api\/display\/slideshows\/([a-f0-9-]+)$/i);
+      if (slideshowMatch && request.method === "PATCH") {
+        return updateDisplaySlideshow(request, env, slideshowMatch[1]);
+      }
+
+      if (slideshowMatch && request.method === "DELETE") {
+        return deleteDisplaySlideshow(request, env, slideshowMatch[1]);
+      }
+
       if (path === "/api/display/media" && request.method === "GET") {
         return listMediaAssets(env);
       }
@@ -370,7 +387,7 @@ async function login(request, env) {
     .first();
 
   if (!account) {
-    return unauthorized("This account is not allowed.");
+    return unauthorized("No account request found. Use Create account first.");
   }
 
   if (account.status === "pending") {
@@ -813,6 +830,130 @@ async function updateDisplayState(request, env) {
     .run();
 
   return json({ ok: true, display: next });
+}
+
+async function listDisplaySlideshows(request, env) {
+  const auth = await requireAdmin(request, env);
+  if (!auth.ok) {
+    return auth.response;
+  }
+
+  const { results } = await env.boardbinding
+    .prepare(`
+      SELECT id, title, playlist_json, ticker, slide_duration_seconds, created_by, created_at, updated_at
+      FROM display_slideshows
+      ORDER BY datetime(updated_at) DESC
+    `)
+    .all();
+
+  return json({
+    slideshows: results.map(rowToDisplaySlideshow)
+  });
+}
+
+async function createDisplaySlideshow(request, env) {
+  const auth = await requireAdmin(request, env);
+  if (!auth.ok) {
+    return auth.response;
+  }
+
+  const body = await readJson(request);
+  const now = new Date().toISOString();
+  const slideshow = normalizeDisplaySlideshowPayload(body, {
+    id: crypto.randomUUID(),
+    createdBy: auth.session.user,
+    createdAt: now,
+    updatedAt: now
+  });
+
+  await env.boardbinding
+    .prepare(`
+      INSERT INTO display_slideshows (
+        id, title, playlist_json, ticker, slide_duration_seconds,
+        created_by, created_at, updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    .bind(
+      slideshow.id,
+      slideshow.title,
+      JSON.stringify(slideshow.playlist),
+      slideshow.ticker,
+      slideshow.slideDurationSeconds,
+      slideshow.createdBy,
+      slideshow.createdAt,
+      slideshow.updatedAt
+    )
+    .run();
+
+  return json({ ok: true, slideshow }, 201);
+}
+
+async function updateDisplaySlideshow(request, env, slideshowId) {
+  const auth = await requireAdmin(request, env);
+  if (!auth.ok) {
+    return auth.response;
+  }
+
+  const existing = await env.boardbinding
+    .prepare(`
+      SELECT id, title, playlist_json, ticker, slide_duration_seconds, created_by, created_at, updated_at
+      FROM display_slideshows
+      WHERE id = ?
+      LIMIT 1
+    `)
+    .bind(slideshowId)
+    .first();
+
+  if (!existing) {
+    return json({ error: "Slideshow not found." }, 404);
+  }
+
+  const body = await readJson(request);
+  const current = rowToDisplaySlideshow(existing);
+  const slideshow = normalizeDisplaySlideshowPayload({
+    title: body.title ?? current.title,
+    playlist: body.playlist ?? current.playlist,
+    ticker: body.ticker ?? current.ticker,
+    slideDurationSeconds: body.slideDurationSeconds ?? current.slideDurationSeconds
+  }, {
+    id: current.id,
+    createdBy: current.createdBy,
+    createdAt: current.createdAt,
+    updatedAt: new Date().toISOString()
+  });
+
+  await env.boardbinding
+    .prepare(`
+      UPDATE display_slideshows
+      SET title = ?, playlist_json = ?, ticker = ?, slide_duration_seconds = ?, updated_at = ?
+      WHERE id = ?
+    `)
+    .bind(
+      slideshow.title,
+      JSON.stringify(slideshow.playlist),
+      slideshow.ticker,
+      slideshow.slideDurationSeconds,
+      slideshow.updatedAt,
+      slideshow.id
+    )
+    .run();
+
+  return json({ ok: true, slideshow });
+}
+
+async function deleteDisplaySlideshow(request, env, slideshowId) {
+  const auth = await requireAdmin(request, env);
+  if (!auth.ok) {
+    return auth.response;
+  }
+
+  await env.boardbinding
+    .prepare("DELETE FROM display_slideshows WHERE id = ?")
+    .bind(slideshowId)
+    .run();
+
+  return json({ ok: true });
 }
 
 async function listMediaAssets(env) {
@@ -1479,7 +1620,11 @@ function normalizePlaylistSlide(item, index = 0) {
           id,
           title: normalizeDisplayText(item?.title, `Media ${index + 1}`, 120),
           mediaType: normalizeMediaType(item?.mediaType),
-          url: legacyUrl
+          url: legacyUrl,
+          cropX: normalizeCropValue(item?.cropX),
+          cropY: normalizeCropValue(item?.cropY),
+          size: normalizeMediaSize(item?.size),
+          zoom: normalizeCropZoom(item?.zoom)
         }]
       : [];
 
@@ -1490,6 +1635,9 @@ function normalizePlaylistSlide(item, index = 0) {
     mediaDurationSeconds: normalizeSlideDuration(item?.mediaDurationSeconds || 0, true),
     durationSeconds: normalizeSlideDuration(item?.durationSeconds || 0, true),
     layoutMode: normalizeLayoutMode(item?.layoutMode),
+    mediaLayout: normalizeMediaLayout(item?.mediaLayout),
+    mediaSide: normalizeMediaSide(item?.mediaSide),
+    mediaPercent: normalizePercent(item?.mediaPercent, 68),
     statusLabel: normalizeDisplayText(item?.statusLabel, "", 34),
     headline: normalizeDisplayText(item?.headline, "", 92),
     subheadline: normalizeDisplayText(item?.subheadline, "", 180),
@@ -1503,7 +1651,64 @@ function normalizeSlideMediaItem(item) {
     id,
     title: normalizeDisplayText(item?.title, "Untitled media", 120),
     mediaType: normalizeMediaType(item?.mediaType),
-    url: normalizeDisplayText(item?.url, "", 900)
+    url: normalizeDisplayText(item?.url, "", 900),
+    cropX: normalizeCropValue(item?.cropX),
+    cropY: normalizeCropValue(item?.cropY),
+    size: normalizeMediaSize(item?.size),
+    zoom: normalizeCropZoom(item?.zoom)
+  };
+}
+
+function normalizeCropValue(value) {
+  const number = Number.parseFloat(value);
+  if (Number.isNaN(number)) {
+    return 50;
+  }
+
+  return Math.max(0, Math.min(100, number));
+}
+
+function normalizeMediaSize(value) {
+  const number = Number.parseInt(value, 10);
+  if (Number.isNaN(number)) {
+    return 100;
+  }
+
+  return Math.max(25, Math.min(300, number));
+}
+
+function normalizeCropZoom(value) {
+  const number = Number.parseInt(value, 10);
+  if (Number.isNaN(number)) {
+    return 120;
+  }
+
+  return Math.max(100, Math.min(250, number));
+}
+
+function rowToDisplaySlideshow(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    playlist: parsePlaylist(row.playlist_json),
+    ticker: row.ticker || "",
+    slideDurationSeconds: Number(row.slide_duration_seconds || 12),
+    createdBy: row.created_by || "",
+    createdAt: row.created_at || "",
+    updatedAt: row.updated_at || ""
+  };
+}
+
+function normalizeDisplaySlideshowPayload(body, meta) {
+  return {
+    id: meta.id,
+    title: normalizeDisplayText(body.title, "Untitled slideshow", 120),
+    playlist: normalizePlaylist(body.playlist),
+    ticker: normalizeDisplayText(body.ticker, "", 280),
+    slideDurationSeconds: normalizeSlideDuration(body.slideDurationSeconds || 12),
+    createdBy: meta.createdBy,
+    createdAt: meta.createdAt,
+    updatedAt: meta.updatedAt
   };
 }
 
@@ -1531,11 +1736,32 @@ function normalizeTransitionStyle(value) {
 
 function normalizeLayoutMode(value) {
   const layoutMode = String(value || "split").trim().toLowerCase();
-  if (["fullscreen", "fullscreen-text", "split"].includes(layoutMode)) {
+  if (layoutMode === "fullscreen-text") {
+    return "overlay";
+  }
+
+  if (["fullscreen", "overlay", "split"].includes(layoutMode)) {
     return layoutMode;
   }
 
   return "split";
+}
+
+function normalizeMediaLayout(value) {
+  return String(value || "rotate").trim().toLowerCase() === "side-by-side" ? "side-by-side" : "rotate";
+}
+
+function normalizeMediaSide(value) {
+  return String(value || "left").trim().toLowerCase() === "right" ? "right" : "left";
+}
+
+function normalizePercent(value, fallback = 50) {
+  const number = Number.parseInt(value, 10);
+  if (Number.isNaN(number)) {
+    return fallback;
+  }
+
+  return Math.max(25, Math.min(80, number));
 }
 
 function parsePlaylist(value) {

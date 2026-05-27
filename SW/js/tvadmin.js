@@ -15,6 +15,7 @@ const DISPLAY_KEY = "sw-tv-display:state";
 const TOKEN_KEY = "sw-tv-display:token";
 const USER_KEY = "sw-tv-display:user";
 const MEDIA_KEY = "sw-tv-display:media";
+const SLIDESHOWS_KEY = "sw-tv-display:slideshows";
 
 const defaultDisplay = {
     statusLabel: "Steelwrist Presents",
@@ -49,8 +50,17 @@ const elements = {
     refreshMedia: document.getElementById("refresh-media"),
     mediaStatus: document.getElementById("media-status"),
     mediaLibrary: document.getElementById("media-library"),
+    mediaLightbox: document.getElementById("media-lightbox"),
+    mediaLightboxContent: document.getElementById("media-lightbox-content"),
     playlistList: document.getElementById("playlist-list"),
     slideSettings: document.getElementById("slide-settings"),
+    slideshowSaveForm: document.getElementById("slideshow-save-form"),
+    slideshowName: document.getElementById("slideshow-name"),
+    saveSlideshow: document.getElementById("save-slideshow"),
+    updateSlideshow: document.getElementById("update-slideshow"),
+    refreshSlideshows: document.getElementById("refresh-slideshows"),
+    slideshowList: document.getElementById("slideshow-list"),
+    slideshowStatus: document.getElementById("slideshow-status"),
     clearPlaylist: document.getElementById("clear-playlist"),
     uploadForm: document.getElementById("upload-form"),
     uploadFile: document.getElementById("upload-file"),
@@ -61,8 +71,10 @@ const elements = {
     linkMediaType: document.getElementById("link-media-type"),
     preview: {
         root: document.getElementById("preview-root"),
+        mediaShell: document.getElementById("preview-media-shell"),
         image: document.getElementById("preview-image"),
         video: document.getElementById("preview-video"),
+        mediaGrid: document.getElementById("preview-media-grid"),
         placeholder: document.getElementById("preview-placeholder"),
         statusLabel: document.getElementById("preview-status-label"),
         headline: document.getElementById("preview-headline"),
@@ -82,9 +94,12 @@ const elements = {
 let token = window.localStorage.getItem(TOKEN_KEY) || "";
 let user = readStoredUser();
 let mediaAssets = readLocalMedia();
+let savedSlideshows = readLocalSlideshows();
 let playlist = [];
 let previewIndex = 0;
 let previewMediaIndex = 0;
+let selectedSlideshowId = "";
+let cropDrag = null;
 
 function readStoredUser() {
     const stored = window.localStorage.getItem(USER_KEY);
@@ -162,16 +177,34 @@ function writeLocalMedia(assets) {
     window.localStorage.setItem(MEDIA_KEY, JSON.stringify(assets));
 }
 
+function readLocalSlideshows() {
+    const stored = window.localStorage.getItem(SLIDESHOWS_KEY);
+    if (!stored) return [];
+    try {
+        return JSON.parse(stored);
+    } catch {
+        return [];
+    }
+}
+
+function writeLocalSlideshows(slideshows) {
+    window.localStorage.setItem(SLIDESHOWS_KEY, JSON.stringify(slideshows));
+}
+
 function normalizeSlide(item, display = defaultDisplay, index = 0) {
     const mediaItems = Array.isArray(item.mediaItems)
-        ? item.mediaItems
+        ? item.mediaItems.map(normalizeSlideMediaItem)
         : item.url
-            ? [{
+            ? [normalizeSlideMediaItem({
                 id: item.id || crypto.randomUUID(),
                 title: item.title || item.mediaAlt || `Media ${index + 1}`,
                 mediaType: item.mediaType || "image",
-                url: item.url
-            }]
+                url: item.url,
+                cropX: item.cropX,
+                cropY: item.cropY,
+                size: item.size,
+                zoom: item.zoom
+            })]
             : [];
 
     return {
@@ -180,7 +213,10 @@ function normalizeSlide(item, display = defaultDisplay, index = 0) {
         mediaItems,
         mediaDurationSeconds: item.mediaDurationSeconds || item.durationSeconds || 0,
         durationSeconds: item.durationSeconds || 0,
-        layoutMode: item.layoutMode || "split",
+        layoutMode: normalizeLayoutMode(item.layoutMode),
+        mediaLayout: item.mediaLayout === "side-by-side" ? "side-by-side" : "rotate",
+        mediaSide: normalizeMediaSide(item.mediaSide),
+        mediaPercent: clampPercent(item.mediaPercent, 68),
         statusLabel: item.statusLabel ?? display.statusLabel ?? defaultDisplay.statusLabel,
         headline: item.headline || "",
         subheadline: item.subheadline || "",
@@ -210,6 +246,70 @@ function getSelectedMedia(slide = getSelectedSlide()) {
     if (mediaItems.length === 0) return null;
     previewMediaIndex = Math.min(previewMediaIndex, mediaItems.length - 1);
     return mediaItems[previewMediaIndex] || null;
+}
+
+function normalizeSlideMediaItem(item) {
+    return {
+        id: item.id || crypto.randomUUID(),
+        title: item.title || "Untitled media",
+        mediaType: item.mediaType || "image",
+        url: item.url || "",
+        cropX: clampCropValue(item.cropX),
+        cropY: clampCropValue(item.cropY),
+        size: clampMediaSize(item.size),
+        zoom: clampCropZoom(item.zoom)
+    };
+}
+
+function clampCropValue(value) {
+    const number = Number.parseFloat(value);
+    if (Number.isNaN(number)) return 50;
+    return Math.max(0, Math.min(100, number));
+}
+
+function clampPercent(value, fallback = 50) {
+    const number = Number.parseInt(value, 10);
+    if (Number.isNaN(number)) return fallback;
+    return Math.max(25, Math.min(80, number));
+}
+
+function clampMediaSize(value) {
+    const number = Number.parseInt(value, 10);
+    if (Number.isNaN(number)) return 100;
+    return Math.max(25, Math.min(300, number));
+}
+
+function clampCropZoom(value) {
+    const number = Number.parseInt(value, 10);
+    if (Number.isNaN(number)) return 120;
+    return Math.max(100, Math.min(250, number));
+}
+
+function normalizeLayoutMode(value) {
+    const layoutMode = String(value || "split").trim().toLowerCase();
+    if (layoutMode === "fullscreen-text") return "overlay";
+    if (["split", "fullscreen", "overlay"].includes(layoutMode)) return layoutMode;
+    return "split";
+}
+
+function normalizeMediaSide(value) {
+    return String(value || "left").trim().toLowerCase() === "right" ? "right" : "left";
+}
+
+function getCropPosition(media) {
+    return `${clampCropValue(media?.cropX).toFixed(2)}% ${clampCropValue(media?.cropY).toFixed(2)}%`;
+}
+
+function applyCropStyles(element, media) {
+    if (!element) return;
+    const cropPosition = getCropPosition(media);
+    element.style.objectPosition = cropPosition;
+    element.style.transformOrigin = cropPosition;
+    element.style.transform = `scale(${(clampCropZoom(media?.zoom) / 100).toFixed(3)})`;
+}
+
+function getMediaGridTemplate(mediaItems) {
+    return mediaItems.map(media => `${clampMediaSize(media?.size)}fr`).join(" ");
 }
 
 async function request(path, options = {}) {
@@ -269,6 +369,73 @@ async function fetchMediaAssets() {
     }
     writeLocalMedia(mediaAssets);
     renderMediaLibrary();
+}
+
+async function fetchSlideshows() {
+    try {
+        if (config.storageMode === "cloudflare" && apiBaseUrl) {
+            const payload = await request("/api/display/slideshows", { auth: true });
+            savedSlideshows = payload?.slideshows || [];
+        } else {
+            savedSlideshows = readLocalSlideshows();
+        }
+        writeLocalSlideshows(savedSlideshows);
+        renderSlideshows();
+    } catch (error) {
+        renderSlideshows();
+        setStatus(elements.slideshowStatus, error.message, true);
+    }
+}
+
+async function createSlideshow(slideshow) {
+    if (config.storageMode === "cloudflare" && apiBaseUrl) {
+        const payload = await request("/api/display/slideshows", {
+            method: "POST",
+            auth: true,
+            body: JSON.stringify(slideshow)
+        });
+        return payload.slideshow;
+    }
+
+    return {
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        createdBy: user?.user || "local admin",
+        ...slideshow
+    };
+}
+
+async function updateSavedSlideshow(slideshowId, slideshow) {
+    const existing = savedSlideshows.find(item => item.id === slideshowId) || {};
+    if (config.storageMode === "cloudflare" && apiBaseUrl) {
+        const payload = await request(`/api/display/slideshows/${slideshowId}`, {
+            method: "PATCH",
+            auth: true,
+            body: JSON.stringify(slideshow)
+        });
+        return payload.slideshow;
+    }
+
+    return {
+        ...existing,
+        ...slideshow,
+        id: slideshowId,
+        createdAt: existing.createdAt || new Date().toISOString(),
+        createdBy: existing.createdBy || user?.user || "local admin",
+        updatedAt: new Date().toISOString()
+    };
+}
+
+async function deleteSavedSlideshow(slideshowId) {
+    if (config.storageMode === "cloudflare" && apiBaseUrl) {
+        await request(`/api/display/slideshows/${slideshowId}`, {
+            method: "DELETE",
+            auth: true
+        });
+    }
+    savedSlideshows = savedSlideshows.filter(slideshow => slideshow.id !== slideshowId);
+    writeLocalSlideshows(savedSlideshows);
 }
 
 async function createLinkedAsset(asset) {
@@ -376,6 +543,33 @@ function collectForm() {
     return display;
 }
 
+function collectSlideshowPayload() {
+    return {
+        title: elements.slideshowName.value.trim(),
+        playlist: playlist.map(slide => ({
+            ...slide,
+            mediaItems: getSlideMediaItems(slide)
+        })),
+        ticker: elements.fields.ticker.value.trim(),
+        slideDurationSeconds: Number.parseInt(elements.fields.slideDurationSeconds.value, 10) || 12
+    };
+}
+
+function loadSlideshow(slideshow) {
+    selectedSlideshowId = slideshow.id || "";
+    elements.slideshowName.value = slideshow.title || "";
+    elements.fields.ticker.value = slideshow.ticker || "";
+    elements.fields.slideDurationSeconds.value = slideshow.slideDurationSeconds || defaultDisplay.slideDurationSeconds;
+    playlist = Array.isArray(slideshow.playlist)
+        ? slideshow.playlist.map((item, index) => normalizeSlide(item, defaultDisplay, index))
+        : [];
+    previewIndex = 0;
+    previewMediaIndex = 0;
+    renderPlaylist();
+    renderSlideshows();
+    setStatus(elements.slideshowStatus, `Loaded ${slideshow.title || "slideshow"}.`);
+}
+
 async function loadDisplay() {
     setStatus(elements.saveStatus, "Loading...");
     try {
@@ -401,7 +595,8 @@ function keepNonEmptyPlaylist(localDisplay, remoteDisplay) {
     return remoteDisplay;
 }
 
-function createAssetPreview(asset) {
+function createAssetPreview(asset, options = {}) {
+    const shouldCrop = Boolean(options.crop);
     if (asset.mediaType === "video") {
         const video = document.createElement("video");
         video.src = asset.url;
@@ -409,12 +604,18 @@ function createAssetPreview(asset) {
         video.loop = true;
         video.playsInline = true;
         video.preload = "metadata";
+        if (shouldCrop) {
+            applyCropStyles(video, asset);
+        }
         return video;
     }
 
     const image = document.createElement("img");
     image.src = asset.url;
     image.alt = asset.title || "Media";
+    if (shouldCrop) {
+        applyCropStyles(image, asset);
+    }
     return image;
 }
 
@@ -431,7 +632,11 @@ function renderMediaLibrary() {
     mediaAssets.forEach(asset => {
         const card = document.createElement("article");
         card.className = "asset-card";
-        card.appendChild(createAssetPreview(asset));
+        const preview = createAssetPreview(asset);
+        preview.classList.add("asset-preview-media");
+        preview.title = "Click to view";
+        preview.addEventListener("click", () => openMediaLightbox(asset));
+        card.appendChild(preview);
 
         const body = document.createElement("div");
         body.className = "asset-card-body";
@@ -472,6 +677,96 @@ function renderMediaLibrary() {
         card.appendChild(body);
         elements.mediaLibrary.appendChild(card);
     });
+}
+
+function renderSlideshows() {
+    elements.slideshowList.innerHTML = "";
+    elements.updateSlideshow.disabled = !selectedSlideshowId;
+    elements.updateSlideshow.textContent = "Overwrite selected";
+
+    if (savedSlideshows.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "empty-copy";
+        empty.textContent = "No saved slideshows yet.";
+        elements.slideshowList.appendChild(empty);
+        return;
+    }
+
+    savedSlideshows.forEach(slideshow => {
+        const row = document.createElement("article");
+        row.className = "slideshow-row";
+        row.dataset.selected = String(slideshow.id === selectedSlideshowId);
+        row.innerHTML = `
+            <div class="slideshow-row-copy">
+                <strong>${escapeHtml(slideshow.title || "Untitled slideshow")}</strong>
+                <span>${Array.isArray(slideshow.playlist) ? slideshow.playlist.length : 0} slides</span>
+            </div>
+        `;
+
+        const loadButton = makePlaylistButton("Load", () => loadSlideshow(slideshow));
+        const overwriteButton = makePlaylistButton("Overwrite", () => overwriteSlideshow(slideshow.id, slideshow.title));
+        const deleteButton = makePlaylistButton("Delete", async () => {
+            setStatus(elements.slideshowStatus, "Deleting slideshow...");
+            try {
+                await deleteSavedSlideshow(slideshow.id);
+                if (selectedSlideshowId === slideshow.id) {
+                    selectedSlideshowId = "";
+                    elements.slideshowName.value = "";
+                }
+                renderSlideshows();
+                setStatus(elements.slideshowStatus, "Deleted slideshow.");
+            } catch (error) {
+                setStatus(elements.slideshowStatus, error.message, true);
+            }
+        });
+        const actions = document.createElement("div");
+        actions.className = "slideshow-row-actions";
+        actions.append(loadButton, overwriteButton, deleteButton);
+        row.appendChild(actions);
+        elements.slideshowList.appendChild(row);
+    });
+}
+
+async function overwriteSlideshow(slideshowId, fallbackTitle = "") {
+    const slideshow = {
+        ...collectSlideshowPayload(),
+        title: elements.slideshowName.value.trim() || fallbackTitle || "Untitled slideshow"
+    };
+    if (!slideshowId) return;
+
+    setStatus(elements.slideshowStatus, "Overwriting saved slideshow...");
+    try {
+        const saved = await updateSavedSlideshow(slideshowId, slideshow);
+        savedSlideshows = [saved, ...savedSlideshows.filter(item => item.id !== saved.id)];
+        selectedSlideshowId = saved.id;
+        elements.slideshowName.value = saved.title;
+        writeLocalSlideshows(savedSlideshows);
+        renderSlideshows();
+        setStatus(elements.slideshowStatus, "Overwrote saved slideshow.");
+    } catch (error) {
+        setStatus(elements.slideshowStatus, error.message, true);
+    }
+}
+
+function openMediaLightbox(asset) {
+    elements.mediaLightboxContent.replaceChildren();
+    const preview = createAssetPreview(asset);
+    preview.classList.add("media-lightbox-media");
+    preview.style.maxWidth = "100%";
+    preview.style.maxHeight = "100%";
+    preview.style.width = "auto";
+    preview.style.height = "auto";
+    preview.style.objectFit = "contain";
+    preview.removeAttribute("title");
+    elements.mediaLightboxContent.appendChild(preview);
+    elements.mediaLightbox.classList.remove("hidden");
+    elements.mediaLightbox.setAttribute("aria-hidden", "false");
+}
+
+function closeMediaLightbox() {
+    elements.mediaLightbox.classList.add("hidden");
+    elements.mediaLightbox.setAttribute("aria-hidden", "true");
+    elements.mediaLightboxContent.replaceChildren();
 }
 
 function startAssetRename(titleElement, asset) {
@@ -590,11 +885,11 @@ function renderSlideSettings() {
             <span>Presentation label</span>
             <input data-field="statusLabel" type="text" maxlength="34" placeholder="Leave blank to hide" value="${escapeAttribute(item.statusLabel || "")}">
         </label>
-        <label class="field">
-            <span>Slide promo line</span>
-            <textarea data-field="announcement" rows="3" maxlength="220">${escapeHtml(item.announcement || "")}</textarea>
-        </label>
-        <div class="slide-setting-row">
+            <label class="field">
+                <span>Slide promo line</span>
+                <textarea data-field="announcement" rows="3" maxlength="220">${escapeHtml(item.announcement || "")}</textarea>
+            </label>
+            <div class="slide-setting-row">
             <label class="field">
                 <span>Seconds</span>
                 <input data-field="durationSeconds" type="number" min="0" max="300" step="1" value="${item.durationSeconds || ""}">
@@ -603,15 +898,33 @@ function renderSlideSettings() {
                 <span>Media seconds</span>
                 <input data-field="mediaDurationSeconds" type="number" min="0" max="300" step="1" value="${item.mediaDurationSeconds || ""}">
             </label>
-            <label class="field">
-                <span>Layout</span>
-                <select data-field="layoutMode">
-                    <option value="split">Text beside</option>
-                    <option value="fullscreen">Full screen</option>
-                    <option value="fullscreen-text">Full screen + text</option>
+                <label class="field">
+                    <span>Layout</span>
+                    <select data-field="layoutMode">
+                    <option value="split">Image and text</option>
+                    <option value="overlay">Image with text overlay</option>
+                    <option value="fullscreen">Image only</option>
                 </select>
-            </label>
-        </div>
+                </label>
+                <label class="field">
+                    <span>Media display</span>
+                    <select data-field="mediaLayout">
+                        <option value="rotate">Rotate media</option>
+                        <option value="side-by-side">Show side by side</option>
+                    </select>
+                </label>
+                <label class="field">
+                    <span>Image width</span>
+                    <input data-field="mediaPercent" type="range" min="25" max="80" step="1" value="${item.mediaPercent || 68}">
+                </label>
+                <label class="field">
+                    <span>Image side</span>
+                    <select data-field="mediaSide">
+                        <option value="left">Left</option>
+                        <option value="right">Right</option>
+                    </select>
+                </label>
+            </div>
         <div class="slide-media-heading">
             <span>Slide media</span>
             <button class="button button-secondary" data-action="add-media" type="button">Choose media</button>
@@ -626,13 +939,26 @@ function renderSlideSettings() {
 
     const layout = settings.querySelector("[data-field='layoutMode']");
     layout.value = item.layoutMode || "split";
+    settings.querySelector("[data-field='mediaLayout']").value = item.mediaLayout || "rotate";
+    settings.querySelector("[data-field='mediaSide']").value = normalizeMediaSide(item.mediaSide);
 
     settings.querySelectorAll("[data-field]").forEach(input => {
         const updateItem = () => {
             const field = input.dataset.field;
-            item[field] = ["durationSeconds", "mediaDurationSeconds"].includes(field)
+            item[field] = ["durationSeconds", "mediaDurationSeconds", "mediaPercent"].includes(field)
                 ? Number.parseInt(input.value, 10) || 0
                 : input.value;
+            if (field === "layoutMode") {
+                item.layoutMode = normalizeLayoutMode(item.layoutMode);
+                input.value = item.layoutMode;
+            }
+            if (field === "mediaPercent") {
+                item.mediaPercent = clampPercent(item.mediaPercent, 68);
+            }
+            if (field === "mediaSide") {
+                item.mediaSide = normalizeMediaSide(item.mediaSide);
+                input.value = item.mediaSide;
+            }
             renderPreview();
             renderSlideRailSelection();
         };
@@ -690,6 +1016,7 @@ function renderSlideMediaList(container, slide) {
     mediaItems.forEach((media, index) => {
         const row = document.createElement("article");
         row.className = "slide-media-row";
+        row.dataset.selected = String(index === previewMediaIndex);
         row.innerHTML = `
             <span class="slide-media-index">${index + 1}</span>
             <span class="slide-media-thumb"></span>
@@ -697,12 +1024,36 @@ function renderSlideMediaList(container, slide) {
                 <strong>${escapeHtml(media.title || "Untitled media")}</strong>
                 <small>${escapeHtml(media.mediaType || "image")}</small>
             </span>
+            <label class="slide-media-size">
+                <span>Width</span>
+                <input data-action="media-size" type="range" min="25" max="300" step="5" value="${clampMediaSize(media.size)}">
+            </label>
+            <label class="slide-media-size">
+                <span>Zoom</span>
+                <input data-action="media-zoom" type="range" min="100" max="250" step="5" value="${clampCropZoom(media.zoom)}">
+            </label>
         `;
-        row.querySelector(".slide-media-thumb").appendChild(createAssetPreview(media));
+        row.querySelector(".slide-media-thumb").appendChild(createAssetPreview(media, { crop: true }));
+        row.querySelector("[data-action='media-size']").addEventListener("input", event => {
+            media.size = clampMediaSize(event.target.value);
+            renderPreview();
+        });
+        row.querySelector("[data-action='media-zoom']").addEventListener("input", event => {
+            media.zoom = clampCropZoom(event.target.value);
+            renderPreview();
+        });
 
         const selectButton = makePlaylistButton("View", () => {
             previewMediaIndex = index;
             renderPreview();
+            renderSlideSettings();
+        });
+        const centerButton = makePlaylistButton("Center", () => {
+            media.cropX = 50;
+            media.cropY = 50;
+            previewMediaIndex = index;
+            renderPreview();
+            renderSlideSettings();
         });
         const removeButton = makePlaylistButton("Remove", () => {
             slide.mediaItems.splice(index, 1);
@@ -711,7 +1062,7 @@ function renderSlideMediaList(container, slide) {
         });
         const actions = document.createElement("div");
         actions.className = "slide-media-actions";
-        actions.append(selectButton, removeButton);
+        actions.append(selectButton, centerButton, removeButton);
         row.appendChild(actions);
         container.appendChild(row);
     });
@@ -752,7 +1103,11 @@ function addAssetToSelectedSlide(asset) {
         id: asset.id,
         title: asset.title,
         mediaType: asset.mediaType,
-        url: asset.url
+        url: asset.url,
+        cropX: 50,
+        cropY: 50,
+        size: 100,
+        zoom: 120
     });
     previewMediaIndex = slide.mediaItems.length - 1;
     renderPlaylist();
@@ -778,18 +1133,23 @@ function movePlaylistItem(index, direction) {
 function renderPreview() {
     const item = playlist[previewIndex] || null;
     const media = getSelectedMedia(item);
-    const hasMedia = Boolean(media?.url);
+    const mediaItems = getSlideMediaItems(item).filter(mediaItem => mediaItem?.url);
+    const isSideBySide = item?.mediaLayout === "side-by-side" && mediaItems.length > 1;
+    const hasMedia = isSideBySide || Boolean(media?.url);
     const isVideo = media?.mediaType === "video";
     const hasCopy = Boolean(item?.statusLabel || item?.headline || item?.subheadline || item?.announcement);
 
     const mediaCount = getSlideMediaItems(item).length;
     elements.preview.counter.textContent = playlist.length
-        ? `Slide ${previewIndex + 1} / ${playlist.length}${mediaCount ? ` · Media ${previewMediaIndex + 1} / ${mediaCount}` : ""}`
+        ? `Slide ${previewIndex + 1} / ${playlist.length}${mediaCount ? ` - Media ${previewMediaIndex + 1} / ${mediaCount}` : ""}`
         : "0 / 0";
     elements.preview.prev.disabled = playlist.length <= 1;
     elements.preview.next.disabled = playlist.length <= 1;
     elements.preview.root.dataset.layout = getPreviewLayoutMode(item);
+    elements.preview.root.dataset.mediaSide = normalizeMediaSide(item?.mediaSide);
     elements.preview.root.classList.toggle("has-slide-copy", hasCopy);
+    elements.preview.root.style.setProperty("--media-percent", `${clampPercent(item?.mediaPercent, 68)}%`);
+    elements.preview.root.style.setProperty("--text-percent", `${100 - clampPercent(item?.mediaPercent, 68)}%`);
 
     elements.preview.statusLabel.textContent = item?.statusLabel || "";
     elements.preview.headline.textContent = item?.headline || "";
@@ -798,12 +1158,28 @@ function renderPreview() {
     elements.preview.ticker.textContent = elements.fields.ticker.value.trim();
 
     elements.preview.placeholder.classList.toggle("hidden", hasMedia);
-    elements.preview.image.classList.toggle("hidden", !hasMedia || isVideo);
-    elements.preview.video.classList.toggle("hidden", !hasMedia || !isVideo);
+    elements.preview.mediaGrid.classList.toggle("hidden", !isSideBySide);
+    elements.preview.image.classList.toggle("hidden", !hasMedia || isVideo || isSideBySide);
+    elements.preview.video.classList.toggle("hidden", !hasMedia || !isVideo || isSideBySide);
+    elements.preview.mediaShell.classList.toggle("is-croppable", hasMedia && !isVideo && !isSideBySide);
+
+    if (isSideBySide) {
+        renderPreviewMediaGrid(mediaItems);
+        elements.preview.image.removeAttribute("src");
+        elements.preview.video.removeAttribute("src");
+        return;
+    }
+    elements.preview.mediaGrid.replaceChildren();
 
     if (!hasMedia) {
         elements.preview.image.removeAttribute("src");
         elements.preview.video.removeAttribute("src");
+        elements.preview.image.style.objectPosition = "";
+        elements.preview.video.style.objectPosition = "";
+        elements.preview.image.style.transform = "";
+        elements.preview.video.style.transform = "";
+        elements.preview.image.style.transformOrigin = "";
+        elements.preview.video.style.transformOrigin = "";
         return;
     }
 
@@ -812,6 +1188,7 @@ function renderPreview() {
             elements.preview.video.src = media.url;
             elements.preview.video.load();
         }
+        applyCropStyles(elements.preview.video, media);
         elements.preview.image.removeAttribute("src");
         return;
     }
@@ -820,19 +1197,81 @@ function renderPreview() {
         elements.preview.image.src = media.url;
     }
     elements.preview.image.alt = media.title || item?.title || "Display preview media";
+    applyCropStyles(elements.preview.image, media);
     elements.preview.video.removeAttribute("src");
 }
 
+function renderPreviewMediaGrid(mediaItems) {
+    elements.preview.mediaGrid.replaceChildren();
+    elements.preview.mediaGrid.dataset.count = String(mediaItems.length);
+    elements.preview.mediaGrid.style.gridTemplateColumns = getMediaGridTemplate(mediaItems);
+    mediaItems.forEach((media, index) => {
+        const cell = document.createElement("div");
+        cell.className = "loop-preview-media-cell";
+        const preview = createAssetPreview(media, { crop: true });
+        preview.classList.add("loop-preview-grid-media");
+        preview.dataset.mediaIndex = String(index);
+        preview.addEventListener("pointerdown", event => {
+            event.stopPropagation();
+            const slideMediaIndex = getSlideMediaItems(getSelectedSlide()).indexOf(media);
+            if (slideMediaIndex >= 0) {
+                previewMediaIndex = slideMediaIndex;
+            }
+            startCropDrag(event, media, preview);
+        });
+        cell.appendChild(preview);
+        elements.preview.mediaGrid.appendChild(cell);
+    });
+}
+
+function startCropDrag(event, dragMedia = getSelectedMedia(), dragElement = elements.preview.mediaShell) {
+    if (dragElement === elements.preview.mediaShell && event.target.closest(".loop-preview-media-grid")) {
+        return;
+    }
+    const media = dragMedia;
+    if (!media?.url || media.mediaType === "video") return;
+    event.preventDefault();
+    cropDrag = {
+        pointerId: event.pointerId,
+        media,
+        element: dragElement,
+        startX: event.clientX,
+        startY: event.clientY,
+        cropX: clampCropValue(media.cropX),
+        cropY: clampCropValue(media.cropY)
+    };
+    dragElement.setPointerCapture(event.pointerId);
+    dragElement.classList.add("is-dragging");
+}
+
+function updateCropDrag(event) {
+    if (!cropDrag || event.pointerId !== cropDrag.pointerId) return;
+    const media = cropDrag.media;
+    if (!media) return;
+    const rect = cropDrag.element.getBoundingClientRect();
+    const deltaX = ((event.clientX - cropDrag.startX) / Math.max(rect.width, 1)) * 100;
+    const deltaY = ((event.clientY - cropDrag.startY) / Math.max(rect.height, 1)) * 100;
+    media.cropX = clampCropValue(cropDrag.cropX - deltaX);
+    media.cropY = clampCropValue(cropDrag.cropY - deltaY);
+    if (cropDrag.element === elements.preview.mediaShell) {
+        applyCropStyles(elements.preview.image, media);
+        applyCropStyles(elements.preview.video, media);
+    } else {
+        applyCropStyles(cropDrag.element, media);
+    }
+}
+
+function endCropDrag(event) {
+    if (!cropDrag || event.pointerId !== cropDrag.pointerId) return;
+    cropDrag.element.classList.remove("is-dragging");
+    cropDrag.element.releasePointerCapture(event.pointerId);
+    cropDrag = null;
+    renderPreview();
+    renderSlideSettings();
+}
+
 function getPreviewLayoutMode(item) {
-    const layoutMode = String(item?.layoutMode || "split").trim().toLowerCase();
-    const hasSlideCopy = Boolean(item?.statusLabel || item?.headline || item?.subheadline || item?.announcement);
-    if (layoutMode === "fullscreen" && hasSlideCopy) {
-        return "fullscreen-text";
-    }
-    if (["fullscreen", "fullscreen-text", "split"].includes(layoutMode)) {
-        return layoutMode;
-    }
-    return "split";
+    return normalizeLayoutMode(item?.layoutMode);
 }
 
 function movePreview(direction) {
@@ -895,7 +1334,7 @@ elements.loginForm.addEventListener("submit", async event => {
     if (!(config.storageMode === "cloudflare" && apiBaseUrl)) {
         setSession("local-demo", { user: "local admin", workerCode: config.workerCode });
         elements.password.value = "";
-        await Promise.all([loadDisplay(), fetchMediaAssets()]);
+        await Promise.all([loadDisplay(), fetchMediaAssets(), fetchSlideshows()]);
         setStatus(elements.loginStatus, "Signed in locally.");
         return;
     }
@@ -911,7 +1350,7 @@ elements.loginForm.addEventListener("submit", async event => {
         setSession(payload?.token || "", payload?.user || null);
         elements.password.value = "";
         setStatus(elements.loginStatus, "Signed in.");
-        await Promise.all([loadDisplay(), fetchMediaAssets()]);
+        await Promise.all([loadDisplay(), fetchMediaAssets(), fetchSlideshows()]);
     } catch (error) {
         setStatus(elements.loginStatus, error.message, true);
     }
@@ -978,8 +1417,37 @@ elements.form.addEventListener("submit", async event => {
     }
 });
 
+elements.slideshowSaveForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    const slideshow = collectSlideshowPayload();
+    if (!slideshow.title) {
+        setStatus(elements.slideshowStatus, "Name the slideshow before saving.", true);
+        return;
+    }
+
+    setStatus(elements.slideshowStatus, "Saving slideshow...");
+    try {
+        const saved = await createSlideshow(slideshow);
+        savedSlideshows = [saved, ...savedSlideshows.filter(item => item.id !== saved.id)];
+        selectedSlideshowId = saved.id;
+        elements.slideshowName.value = saved.title;
+        writeLocalSlideshows(savedSlideshows);
+        renderSlideshows();
+        setStatus(elements.slideshowStatus, "Saved slideshow.");
+    } catch (error) {
+        setStatus(elements.slideshowStatus, error.message, true);
+    }
+});
+
+elements.updateSlideshow.addEventListener("click", async () => {
+    if (!selectedSlideshowId) return;
+    const existing = savedSlideshows.find(item => item.id === selectedSlideshowId);
+    await overwriteSlideshow(selectedSlideshowId, existing?.title || "");
+});
+
 elements.refresh.addEventListener("click", loadDisplay);
 elements.refreshMedia.addEventListener("click", fetchMediaAssets);
+elements.refreshSlideshows.addEventListener("click", fetchSlideshows);
 elements.clearPlaylist.addEventListener("click", () => {
     playlist = [];
     previewIndex = 0;
@@ -991,6 +1459,11 @@ elements.slideRailAdd.addEventListener("click", addBlankSlide);
 elements.backToLoop.addEventListener("click", () => showAdminView("loop"));
 elements.preview.prev.addEventListener("click", () => movePreview(-1));
 elements.preview.next.addEventListener("click", () => movePreview(1));
+elements.preview.mediaShell.addEventListener("pointerdown", startCropDrag);
+elements.preview.mediaShell.addEventListener("pointermove", updateCropDrag);
+elements.preview.mediaShell.addEventListener("pointerup", endCropDrag);
+elements.preview.mediaShell.addEventListener("pointercancel", endCropDrag);
+elements.mediaLightbox.addEventListener("click", closeMediaLightbox);
 Object.values(elements.fields).forEach(input => {
     input.addEventListener("input", renderPreview);
 });
@@ -1014,5 +1487,7 @@ elements.signOut.addEventListener("click", async () => {
 await initSession();
 renderAuth();
 if (token && user) {
-    await Promise.all([loadDisplay(), fetchMediaAssets()]);
+    await Promise.all([loadDisplay(), fetchMediaAssets(), fetchSlideshows()]);
+} else {
+    renderSlideshows();
 }
