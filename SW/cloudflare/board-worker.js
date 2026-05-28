@@ -1638,6 +1638,9 @@ function normalizePlaylistSlide(item, index = 0) {
     mediaLayout: normalizeMediaLayout(item?.mediaLayout),
     mediaSide: normalizeMediaSide(item?.mediaSide),
     mediaPercent: normalizePercent(item?.mediaPercent, 68),
+    backgroundColor: normalizeColor(item?.backgroundColor),
+    backgroundAccentColor: normalizeColor(item?.backgroundAccentColor, "#2fb764"),
+    backgroundAccentStrength: normalizeAccentStrength(item?.backgroundAccentStrength),
     statusLabel: normalizeDisplayText(item?.statusLabel, "", 34),
     headline: normalizeDisplayText(item?.headline, "", 92),
     subheadline: normalizeDisplayText(item?.subheadline, "", 180),
@@ -1753,6 +1756,20 @@ function normalizeMediaLayout(value) {
 
 function normalizeMediaSide(value) {
   return String(value || "left").trim().toLowerCase() === "right" ? "right" : "left";
+}
+
+function normalizeColor(value, fallback = "#020403") {
+  const color = String(value || "").trim();
+  return /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : fallback;
+}
+
+function normalizeAccentStrength(value) {
+  const number = Number.parseInt(value, 10);
+  if (Number.isNaN(number)) {
+    return 100;
+  }
+
+  return Math.max(0, Math.min(200, number));
 }
 
 function normalizePercent(value, fallback = 50) {

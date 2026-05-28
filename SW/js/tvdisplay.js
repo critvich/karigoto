@@ -329,6 +329,9 @@ function getPlaylistKey(playlist) {
             item.mediaLayout || "",
             item.mediaSide || "",
             item.mediaPercent || 68,
+            item.backgroundColor || "",
+            item.backgroundAccentColor || "",
+            item.backgroundAccentStrength || 100,
             item.durationSeconds || 0,
             item.mediaDurationSeconds || 0,
             item.statusLabel || "",
@@ -409,6 +412,7 @@ function applyMedia(item, mediaUrl, isVideo) {
     elements.root.dataset.mediaSide = getMediaSide(item);
     elements.root.style.setProperty("--media-percent", `${clampPercent(item?.mediaPercent, 68)}%`);
     elements.root.style.setProperty("--text-percent", `${100 - clampPercent(item?.mediaPercent, 68)}%`);
+    applySlideBackgroundStyles(elements.root, item);
     renderSlideText(item);
 
     const mediaItems = Array.isArray(item?.mediaItems) ? item.mediaItems.filter(media => media?.url) : [];
@@ -508,6 +512,30 @@ function clampCropZoom(value) {
     const number = Number.parseInt(value, 10);
     if (Number.isNaN(number)) return 120;
     return Math.max(100, Math.min(250, number));
+}
+
+function normalizeColor(value, fallback = "#020403") {
+    const color = String(value || "").trim();
+    return /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : fallback;
+}
+
+function clampAccentStrength(value) {
+    const number = Number.parseInt(value, 10);
+    if (Number.isNaN(number)) return 100;
+    return Math.max(0, Math.min(200, number));
+}
+
+function hexToRgbTriplet(value, fallback = "#2fb764") {
+    const color = normalizeColor(value, fallback).slice(1);
+    const number = Number.parseInt(color, 16);
+    return `${(number >> 16) & 255} ${(number >> 8) & 255} ${number & 255}`;
+}
+
+function applySlideBackgroundStyles(element, item) {
+    if (!element) return;
+    element.style.setProperty("--slide-bg", normalizeColor(item?.backgroundColor));
+    element.style.setProperty("--slide-accent-rgb", hexToRgbTriplet(item?.backgroundAccentColor));
+    element.style.setProperty("--slide-accent-strength", (clampAccentStrength(item?.backgroundAccentStrength) / 100).toFixed(2));
 }
 
 function getMediaGridTemplate(mediaItems) {

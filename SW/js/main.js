@@ -131,6 +131,7 @@ document.addEventListener("DOMContentLoaded", async function() {
         toggle: document.getElementById("account-toggle"),
         requestToggle: document.getElementById("account-request-toggle"),
         panel: document.getElementById("account-panel"),
+        close: document.getElementById("account-panel-close"),
         summary: document.getElementById("account-summary"),
         form: document.getElementById("account-form"),
         email: document.getElementById("account-email"),
@@ -871,6 +872,13 @@ document.addEventListener("DOMContentLoaded", async function() {
             event.stopPropagation();
             const isSameOpen = !accountElements.panel.classList.contains("hidden") && authState.panelMode === "request";
             setAccountPanelOpen(!isSameOpen, "request");
+        });
+    }
+
+    if (accountElements.close) {
+        accountElements.close.addEventListener("click", event => {
+            event.stopPropagation();
+            setAccountPanelOpen(false);
         });
     }
 

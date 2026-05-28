@@ -19,6 +19,7 @@ const elements = {
     accountRequestToggle: document.getElementById("account-request-toggle"),
     accountAdminToggle: document.getElementById("account-admin-toggle"),
     accountPanel: document.getElementById("account-panel"),
+    accountPanelClose: document.getElementById("account-panel-close"),
     accountSummary: document.getElementById("account-summary"),
     accountForm: document.getElementById("account-form"),
     accountEmail: document.getElementById("account-email"),
@@ -2133,6 +2134,11 @@ async function init() {
             return;
         }
         refreshAccounts(provider);
+    });
+
+    elements.accountPanelClose.addEventListener("click", event => {
+        event.stopPropagation();
+        setAccountPanelOpen(false);
     });
 
     elements.doneToggle.addEventListener("click", () => {

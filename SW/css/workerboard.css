@@ -148,6 +148,26 @@ body {
     z-index: 15;
 }
 
+.account-panel-close {
+    display: none;
+    margin-left: auto;
+    border: 1px solid rgba(150, 150, 150, 0.5);
+    border-radius: 999px;
+    padding: 0.75rem 1.2rem;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text);
+    font: inherit;
+    font-size: 1.25rem;
+    cursor: pointer;
+}
+
+.account-panel-close:hover,
+.account-panel-close:focus-visible {
+    border-color: rgba(67, 176, 42, 0.78);
+    color: var(--accent-strong);
+    outline: none;
+}
+
 .account-form {
     display: grid;
     gap: 1.2rem;
@@ -1424,6 +1444,12 @@ body.is-showing-done .done-drawer {
         margin: 0 auto 1.2rem;
         border-radius: 999px;
         background: rgba(255, 255, 255, 0.28);
+    }
+
+    .account-panel-close {
+        display: block;
+        min-height: 4rem;
+        margin: 0 0 1rem auto;
     }
 
     .account-panel .inline-actions,

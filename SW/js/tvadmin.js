@@ -217,6 +217,9 @@ function normalizeSlide(item, display = defaultDisplay, index = 0) {
         mediaLayout: item.mediaLayout === "side-by-side" ? "side-by-side" : "rotate",
         mediaSide: normalizeMediaSide(item.mediaSide),
         mediaPercent: clampPercent(item.mediaPercent, 68),
+        backgroundColor: normalizeColor(item.backgroundColor),
+        backgroundAccentColor: normalizeColor(item.backgroundAccentColor, "#2fb764"),
+        backgroundAccentStrength: clampAccentStrength(item.backgroundAccentStrength),
         statusLabel: item.statusLabel ?? display.statusLabel ?? defaultDisplay.statusLabel,
         headline: item.headline || "",
         subheadline: item.subheadline || "",
@@ -283,6 +286,30 @@ function clampCropZoom(value) {
     const number = Number.parseInt(value, 10);
     if (Number.isNaN(number)) return 120;
     return Math.max(100, Math.min(250, number));
+}
+
+function normalizeColor(value, fallback = "#020403") {
+    const color = String(value || "").trim();
+    return /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : fallback;
+}
+
+function clampAccentStrength(value) {
+    const number = Number.parseInt(value, 10);
+    if (Number.isNaN(number)) return 100;
+    return Math.max(0, Math.min(200, number));
+}
+
+function hexToRgbTriplet(value, fallback = "#2fb764") {
+    const color = normalizeColor(value, fallback).slice(1);
+    const number = Number.parseInt(color, 16);
+    return `${(number >> 16) & 255} ${(number >> 8) & 255} ${number & 255}`;
+}
+
+function applySlideBackgroundStyles(element, slide) {
+    if (!element) return;
+    element.style.setProperty("--slide-bg", normalizeColor(slide?.backgroundColor));
+    element.style.setProperty("--slide-accent-rgb", hexToRgbTriplet(slide?.backgroundAccentColor));
+    element.style.setProperty("--slide-accent-strength", (clampAccentStrength(slide?.backgroundAccentStrength) / 100).toFixed(2));
 }
 
 function normalizeLayoutMode(value) {
@@ -924,6 +951,19 @@ function renderSlideSettings() {
                         <option value="right">Right</option>
                     </select>
                 </label>
+                <label class="field color-field">
+                    <span>Background</span>
+                    <input data-field="backgroundColor" type="color" value="${normalizeColor(item.backgroundColor)}">
+                </label>
+                <label class="field color-field">
+                    <span>Glow color</span>
+                    <input data-field="backgroundAccentColor" type="color" value="${normalizeColor(item.backgroundAccentColor, "#2fb764")}">
+                </label>
+                <label class="field">
+                    <span>Glow brightness</span>
+                    <input data-field="backgroundAccentStrength" type="range" min="0" max="200" step="5" value="${clampAccentStrength(item.backgroundAccentStrength)}">
+                </label>
+                <button class="button button-secondary slide-apply-button" data-action="apply-background" type="button">Apply background...</button>
             </div>
         <div class="slide-media-heading">
             <span>Slide media</span>
@@ -941,11 +981,14 @@ function renderSlideSettings() {
     layout.value = item.layoutMode || "split";
     settings.querySelector("[data-field='mediaLayout']").value = item.mediaLayout || "rotate";
     settings.querySelector("[data-field='mediaSide']").value = normalizeMediaSide(item.mediaSide);
+    settings.querySelector("[data-field='backgroundColor']").value = normalizeColor(item.backgroundColor);
+    settings.querySelector("[data-field='backgroundAccentColor']").value = normalizeColor(item.backgroundAccentColor, "#2fb764");
+    settings.querySelector("[data-field='backgroundAccentStrength']").value = clampAccentStrength(item.backgroundAccentStrength);
 
     settings.querySelectorAll("[data-field]").forEach(input => {
         const updateItem = () => {
             const field = input.dataset.field;
-            item[field] = ["durationSeconds", "mediaDurationSeconds", "mediaPercent"].includes(field)
+            item[field] = ["durationSeconds", "mediaDurationSeconds", "mediaPercent", "backgroundAccentStrength"].includes(field)
                 ? Number.parseInt(input.value, 10) || 0
                 : input.value;
             if (field === "layoutMode") {
@@ -959,6 +1002,18 @@ function renderSlideSettings() {
                 item.mediaSide = normalizeMediaSide(item.mediaSide);
                 input.value = item.mediaSide;
             }
+            if (field === "backgroundColor") {
+                item.backgroundColor = normalizeColor(item.backgroundColor);
+                input.value = item.backgroundColor;
+            }
+            if (field === "backgroundAccentColor") {
+                item.backgroundAccentColor = normalizeColor(item.backgroundAccentColor, "#2fb764");
+                input.value = item.backgroundAccentColor;
+            }
+            if (field === "backgroundAccentStrength") {
+                item.backgroundAccentStrength = clampAccentStrength(item.backgroundAccentStrength);
+                input.value = item.backgroundAccentStrength;
+            }
             renderPreview();
             renderSlideRailSelection();
         };
@@ -968,6 +1023,7 @@ function renderSlideSettings() {
 
     renderSlideMediaList(settings.querySelector(".slide-media-list"), item);
     settings.querySelector("[data-action='add-media']").addEventListener("click", () => showAdminView("media"));
+    settings.querySelector("[data-action='apply-background']").addEventListener("click", () => openBackgroundApplyDialog(item));
     settings.querySelector("[data-action='up']").addEventListener("click", () => movePlaylistItem(previewIndex, -1));
     settings.querySelector("[data-action='down']").addEventListener("click", () => movePlaylistItem(previewIndex, 1));
     settings.querySelector("[data-action='remove']").addEventListener("click", () => {
@@ -1074,6 +1130,77 @@ function renderSlideRailSelection() {
     });
 }
 
+function openBackgroundApplyDialog(sourceSlide) {
+    const color = normalizeColor(sourceSlide?.backgroundColor);
+    const dialog = document.createElement("div");
+    dialog.className = "slide-apply-dialog";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.innerHTML = `
+        <div class="slide-apply-panel">
+            <div class="slide-apply-heading">
+                <div>
+                    <p class="display-kicker">Background</p>
+                    <h3>Apply to slides</h3>
+                </div>
+                <button class="icon-button" data-action="close-dialog" type="button" aria-label="Close">&times;</button>
+            </div>
+            <div class="slide-apply-actions">
+                <button class="button button-secondary" data-action="select-all" type="button">Select all</button>
+                <button class="button button-secondary" data-action="select-current" type="button">Current only</button>
+            </div>
+            <div class="slide-apply-list"></div>
+            <div class="slide-apply-footer">
+                <button class="button button-secondary" data-action="cancel" type="button">Cancel</button>
+                <button class="button button-primary" data-action="apply" type="button">Apply color</button>
+            </div>
+        </div>
+    `;
+
+    const list = dialog.querySelector(".slide-apply-list");
+    playlist.forEach((slide, index) => {
+        const label = document.createElement("label");
+        label.className = "slide-apply-option";
+        label.innerHTML = `
+            <input type="checkbox" value="${index}" ${index === previewIndex ? "checked" : ""}>
+            <span>${escapeHtml(slide.title || `Slide ${index + 1}`)}</span>
+        `;
+        list.appendChild(label);
+    });
+
+    const closeDialog = () => dialog.remove();
+    dialog.addEventListener("click", event => {
+        if (event.target === dialog) {
+            closeDialog();
+        }
+    });
+    dialog.querySelector("[data-action='close-dialog']").addEventListener("click", closeDialog);
+    dialog.querySelector("[data-action='cancel']").addEventListener("click", closeDialog);
+    dialog.querySelector("[data-action='select-all']").addEventListener("click", () => {
+        dialog.querySelectorAll("input[type='checkbox']").forEach(input => {
+            input.checked = true;
+        });
+    });
+    dialog.querySelector("[data-action='select-current']").addEventListener("click", () => {
+        dialog.querySelectorAll("input[type='checkbox']").forEach(input => {
+            input.checked = Number.parseInt(input.value, 10) === previewIndex;
+        });
+    });
+    dialog.querySelector("[data-action='apply']").addEventListener("click", () => {
+        dialog.querySelectorAll("input[type='checkbox']:checked").forEach(input => {
+            const index = Number.parseInt(input.value, 10);
+            if (playlist[index]) {
+                playlist[index].backgroundColor = color;
+                playlist[index].backgroundAccentColor = normalizeColor(sourceSlide?.backgroundAccentColor, "#2fb764");
+                playlist[index].backgroundAccentStrength = clampAccentStrength(sourceSlide?.backgroundAccentStrength);
+            }
+        });
+        renderPlaylist();
+        closeDialog();
+    });
+    document.body.appendChild(dialog);
+}
+
 function makePlaylistButton(label, onClick) {
     const button = document.createElement("button");
     button.className = "button button-secondary";
@@ -1150,6 +1277,7 @@ function renderPreview() {
     elements.preview.root.classList.toggle("has-slide-copy", hasCopy);
     elements.preview.root.style.setProperty("--media-percent", `${clampPercent(item?.mediaPercent, 68)}%`);
     elements.preview.root.style.setProperty("--text-percent", `${100 - clampPercent(item?.mediaPercent, 68)}%`);
+    applySlideBackgroundStyles(elements.preview.root, item);
 
     elements.preview.statusLabel.textContent = item?.statusLabel || "";
     elements.preview.headline.textContent = item?.headline || "";
