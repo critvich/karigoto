@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0"><title>.to/SW/workersales</title>
+    <link rel="icon" type="image/png" href="media/images/invert%20logo.png?v=20260527-15">
+    <link rel="stylesheet" href="css/workerboard.css?v=20260527-15">
+    <link rel="stylesheet" href="css/workersales.css?v=20260731-1">
+</head>
+
+<body>
+    <header class="worker-header">
+        <div class="worker-brand">
+            <p class="brand-path">.to / <a href="../SW.html">SW</a> / workersales</p>
+            <h1 id="worker-title">Dealer Sales Routing</h1>
+        </div>
+    </header>
+
+    <main class="worker-shell sales-shell">
+        <section class="current-banner">
+            <div class="banner-copy">
+                <p class="eyebrow">Sales Tool</p>
+                <h2>Dealer home state vs. delivery state</h2>
+                <p class="hero-detail">Pick the dealer's home/registration state and the delivery state to see the required route, the step-by-step forms to collect, and any edge cases to watch for.</p>
+            </div>
+        </section>
+
+        <section class="board-space sales-board">
+            <div class="board-heading">
+                <div>
+                    <p class="eyebrow">Route</p>
+                    <h2>Choose states</h2>
+                </div>
+            </div>
+
+            <div class="sales-picker">
+                <label class="field field-select">
+                    <span id="permit-state-label">Dealer home/registration state</span>
+                    <select id="permit-state"></select>
+                </label>
+                <button id="swap-states" class="button button-secondary sales-swap" type="button" title="Swap states" aria-label="Swap states">&#8646;</button>
+                <label class="field field-select">
+                    <span id="delivery-state-label">Delivery state</span>
+                    <select id="delivery-state"></select>
+                </label>
+            </div>
+
+            <p id="sales-placeholder" class="sales-placeholder">Loading the state route data...</p>
+
+            <div id="sales-result" class="sales-result hidden">
+                <div id="sales-option-banner" class="sales-option-banner">
+                    <span id="sales-option-badge" class="sales-option-badge">Option</span>
+                    <p id="sales-option-name" class="sales-option-name"></p>
+                    <p id="sales-option-meta" class="sales-option-meta"></p>
+                </div>
+
+                <div id="sales-edge-case-banner" class="sales-edge-case-banner hidden">
+                    <p class="sales-docs-heading sales-edge-case-heading">Edge case</p>
+                    <div id="sales-edge-case-list" class="sales-edge-case-list"></div>
+                </div>
+
+                <div>
+                    <p class="sales-docs-heading">Steps</p>
+                    <ol id="sales-steps-list" class="sales-doc-list sales-steps-list"></ol>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="js/workersales.js?v=20260731-1"></script>
+</body>
+
+</html>
