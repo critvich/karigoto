@@ -560,7 +560,7 @@ body {
 }
 
 .ticker-shell {
-    height: 9cqw;
+    height: 6.4cqw;
     border: 0;
     border-radius: 0;
     overflow: hidden;
@@ -1014,7 +1014,7 @@ body {
 }
 
 .loop-preview-ticker {
-    height: 9cqw;
+    height: 6.4cqw;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1061,7 +1061,7 @@ body {
 .loop-preview-screen[data-layout="overlay"] .loop-preview-copy {
     position: absolute;
     left: var(--preview-pad);
-    bottom: calc(var(--preview-pad) + 9cqw);
+    bottom: calc(var(--preview-pad) + 6.4cqw);
     z-index: 2;
     width: fit-content;
     max-width: min(34rem, 46%);
