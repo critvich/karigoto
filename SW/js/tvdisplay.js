@@ -222,12 +222,29 @@ function render(display) {
         playerState.renderedItemKey = "";
     }
 
-    elements.statusLabel.textContent = display.statusLabel || defaultDisplay.statusLabel;
-    elements.ticker.textContent = display.ticker || "";
+    renderBrandText(elements.statusLabel, display.statusLabel || defaultDisplay.statusLabel);
+    renderBrandText(elements.ticker, display.ticker || "");
     renderCurrentPlaylistItem();
     if (playlistChanged || !playerState.timer) {
         scheduleNextItem();
     }
+}
+
+function renderBrandText(element, value) {
+    const text = String(value || "");
+    const parts = text.split(/(steelwrist)/gi);
+
+    element.replaceChildren(...parts.filter(Boolean).map(part => {
+        if (part.toLowerCase() !== "steelwrist") {
+            return document.createTextNode(part);
+        }
+
+        const logo = document.createElement("img");
+        logo.className = "steelwrist-wordmark";
+        logo.src = "media/images/steelwrist_text_only.png";
+        logo.alt = "Steelwrist";
+        return logo;
+    }));
 }
 
 function getPlayableItems(display) {
@@ -555,10 +572,10 @@ function applyCropStyles(element, item) {
 }
 
 function renderSlideText(item) {
-    elements.statusLabel.textContent = item?.statusLabel || "";
-    elements.headline.textContent = item?.headline || "";
-    elements.subheadline.textContent = item?.subheadline || "";
-    elements.announcement.textContent = item?.announcement || "";
+    renderBrandText(elements.statusLabel, item?.statusLabel || "");
+    renderBrandText(elements.headline, item?.headline || "");
+    renderBrandText(elements.subheadline, item?.subheadline || "");
+    renderBrandText(elements.announcement, item?.announcement || "");
     elements.root.classList.toggle("has-slide-copy", Boolean(
         item?.statusLabel || item?.headline || item?.subheadline || item?.announcement
     ));

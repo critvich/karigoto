@@ -495,6 +495,15 @@ body {
     display: none;
 }
 
+.steelwrist-wordmark {
+    display: inline-block;
+    width: auto;
+    height: 0.78em;
+    max-width: min(100%, 10em);
+    object-fit: contain;
+    vertical-align: -0.04em;
+}
+
 .promo-copy h1 {
     order: 3;
     max-width: 100%;

@@ -282,6 +282,23 @@ function clampMediaSize(value) {
     return Math.max(25, Math.min(300, number));
 }
 
+function renderBrandText(element, value) {
+    const text = String(value || "");
+    const parts = text.split(/(steelwrist)/gi);
+
+    element.replaceChildren(...parts.filter(Boolean).map(part => {
+        if (part.toLowerCase() !== "steelwrist") {
+            return document.createTextNode(part);
+        }
+
+        const logo = document.createElement("img");
+        logo.className = "steelwrist-wordmark";
+        logo.src = "media/images/steelwrist_text_only.png";
+        logo.alt = "Steelwrist";
+        return logo;
+    }));
+}
+
 function clampCropZoom(value) {
     const number = Number.parseInt(value, 10);
     if (Number.isNaN(number)) return 120;
@@ -1279,11 +1296,11 @@ function renderPreview() {
     elements.preview.root.style.setProperty("--text-percent", `${100 - clampPercent(item?.mediaPercent, 68)}%`);
     applySlideBackgroundStyles(elements.preview.root, item);
 
-    elements.preview.statusLabel.textContent = item?.statusLabel || "";
-    elements.preview.headline.textContent = item?.headline || "";
-    elements.preview.subheadline.textContent = item?.subheadline || "";
-    elements.preview.announcement.textContent = item?.announcement || "";
-    elements.preview.ticker.textContent = elements.fields.ticker.value.trim();
+    renderBrandText(elements.preview.statusLabel, item?.statusLabel || "");
+    renderBrandText(elements.preview.headline, item?.headline || "");
+    renderBrandText(elements.preview.subheadline, item?.subheadline || "");
+    renderBrandText(elements.preview.announcement, item?.announcement || "");
+    renderBrandText(elements.preview.ticker, elements.fields.ticker.value.trim());
 
     elements.preview.placeholder.classList.toggle("hidden", hasMedia);
     elements.preview.mediaGrid.classList.toggle("hidden", !isSideBySide);
