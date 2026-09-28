@@ -892,7 +892,8 @@ body {
     padding: var(--preview-pad);
     display: grid;
     grid-template-rows: minmax(0, 1fr) auto;
-    gap: var(--preview-pad);
+    /* 6.419% of the inner 16:9 height equals 3.2% of the canvas width. */
+    row-gap: 6.419%;
     position: relative;
     overflow: hidden;
     border-radius: 0.8rem;
