@@ -1,0 +1,92 @@
+/*
+  Sister stylesheet for muffin-v2.html
+  Additive only — compilemain.css and header.css are untouched so nothing
+  else on the site is affected. Same colors/typography as the original,
+  just a few new rules to support the JS fixes + basic mobile support.
+*/
+
+/*---------------------- Active sidebar link ---------------------- */
+/* Reuses the existing hover color/glow so it matches the current
+   design language instead of introducing a new accent. */
+.sidebarl.current {
+  color: #E59A8B;
+  text-shadow: 0px 0px 5px rgba(229, 154, 139, 0.9);
+}
+
+/*---------------------- Social buttons ---------------------- */
+/* Pill buttons for the YouTube/Twitch links. Background reuses #2d223d,
+   which the palette already uses for the LLM chat bubbles and the text
+   input elsewhere in compilemain.css, so it reads as an existing app
+   color rather than a new one — it sits a shade lighter than the
+   .content card (#23182e) it's nested in, giving it just enough
+   separation to read as a button. Hover reuses the same
+   color/text-shadow glow as every other link on the site. */
+.socialbuttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem;
+  width: 100%;
+  margin-top: 0.5rem;
+}
+.socialbtn:link,
+.socialbtn:visited {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.9rem 2rem;
+  border-radius: 5rem;
+  background-color: #2d223d;
+  color: #E691AB;
+  font-weight: 600;
+  font-size: 1.8vh;
+  text-decoration: none;
+  transition: transform 0.15s ease, color 0.15s ease, text-shadow 0.15s ease;
+}
+.socialbtn:hover,
+.socialbtn:active {
+  color: #E59A8B;
+  text-shadow: 0px 0px 5px rgba(229, 154, 139, 0.9);
+  transform: translateY(-2px);
+}
+
+/*---------------------- Basic mobile support ---------------------- */
+/* The original has no @media rules at all, and all type is sized in vh,
+   so it can get very small/large on odd viewport ratios. This only
+   touches type size and the content column width — it never touches
+   .sidebar, so the hover expand/collapse behavior is identical to the
+   original at every window width (this was previously broken: a width
+   media query had set .sidebar and .sidebar:hover to the same width,
+   which killed the hover effect any time the window was under 700px,
+   not just on phones). */
+@media (max-width: 700px) {
+  .page {
+    width: 92%;
+  }
+  .headed {
+    font-size: clamp(2.2rem, 4.225vh, 3.2rem);
+  }
+  .seconded {
+    font-size: clamp(1.6rem, 2.575vh, 2.1rem);
+  }
+  .medium {
+    font-size: clamp(1.3rem, 1.925vh, 1.6rem);
+  }
+  .large {
+    font-size: clamp(1.3rem, 2.325vh, 1.6rem);
+  }
+}
+
+/* Hover only exists for mouse/trackpad input. On an actual touchscreen
+   (hover: none) the sidebar can never be "hovered" open, so instead of
+   staying stuck at the icon-only 8.5% width, widen it permanently there.
+   This is scoped to real no-hover devices, not just narrow windows, so
+   desktop hover-to-expand is never affected. */
+@media (hover: none) {
+  .sidebar {
+    width: 24%;
+  }
+  .sidebar::after {
+    display: none;
+  }
+}
