@@ -69,7 +69,9 @@ body {
     --accent: #2fb764;
     --accent-strong: #79e18f;
     --shadow: 0 2.4rem 7rem rgba(0, 0, 0, 0.48);
-    --display-pad: clamp(2rem, 3.2vw, 5.2rem);
+    /* One canvas unit always equals 1% of the locked 16:9 canvas width. */
+    --canvas-width-unit: min(1vw, calc(1vh * 16 / 9));
+    --display-pad: calc(var(--canvas-width-unit) * 3.2);
     --media-percent: 68%;
     --text-percent: 32%;
     --slide-bg: #020403;
@@ -87,6 +89,7 @@ body {
     background-size: 150% 150%, 140% 140%, 160% 160%, auto;
     background-position: 0% 0%, 100% 10%, 50% 100%, center;
     position: relative;
+    container-type: inline-size;
     color: var(--ink);
     overflow: hidden;
 }
@@ -557,13 +560,13 @@ body {
 }
 
 .ticker-shell {
-    height: 7.2rem;
+    height: 9cqw;
     border: 0;
     border-radius: 0;
     overflow: hidden;
     display: flex;
     align-items: center;
-    padding: 0 2.4rem;
+    padding: 0 3cqw;
     background: transparent;
     box-shadow: none;
     backdrop-filter: none;
@@ -575,7 +578,7 @@ body {
     font-family: "HelveticaDisplay", "Petch", sans-serif;
     font-weight: 400;
     font-synthesis: none;
-    font-size: clamp(3.8rem, 4.6vw, 7.8rem);
+    font-size: 4.6cqw;
     white-space: normal;
     line-height: 0.95;
     letter-spacing: 0;
@@ -882,7 +885,7 @@ body {
     aspect-ratio: 16 / 9;
     width: 100%;
     min-height: 0;
-    --preview-pad: clamp(1rem, 2.2vw, 2rem);
+    --preview-pad: 3.2%;
     --media-percent: 68%;
     --text-percent: 32%;
     --slide-bg: #020403;
@@ -1011,7 +1014,7 @@ body {
 }
 
 .loop-preview-ticker {
-    min-height: 3.4rem;
+    height: 9cqw;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1058,7 +1061,7 @@ body {
 .loop-preview-screen[data-layout="overlay"] .loop-preview-copy {
     position: absolute;
     left: var(--preview-pad);
-    bottom: calc(var(--preview-pad) + 3.4rem);
+    bottom: calc(var(--preview-pad) + 9cqw);
     z-index: 2;
     width: fit-content;
     max-width: min(34rem, 46%);
