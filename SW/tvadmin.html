@@ -8,7 +8,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0"><title>SW TV Admin</title>
     <link rel="icon" type="image/png" href="media/images/invert%20logo.png?v=20260527-15">
-    <link rel="stylesheet" href="css/tvdisplay.css?v=20260928-5">
+    <link rel="stylesheet" href="css/tvdisplay.css?v=20261021-1">
 </head>
 
 <body class="admin-body">
@@ -95,33 +95,25 @@
                                 <h3>Display View</h3>
                             </div>
                             <div class="preview-controls">
+                                <label class="preview-resolution">
+                                    <span>TV size</span>
+                                    <select id="preview-resolution" aria-label="TV preview resolution">
+                                        <option value="1920x1080">1080p · 16:9</option>
+                                        <option value="3840x2160">4K · 16:9</option>
+                                        <option value="1280x720">720p · 16:9</option>
+                                    </select>
+                                </label>
                                 <button id="preview-prev" class="button button-secondary" type="button">Prev</button>
                                 <p id="preview-counter" class="preview-counter">0 / 0</p>
                                 <button id="preview-next" class="button button-secondary" type="button">Next</button>
                             </div>
                         </div>
 
-                        <div id="preview-root" class="loop-preview-screen" data-layout="split">
-                            <section class="loop-preview-hero">
-                                <div id="preview-media-shell" class="loop-preview-media">
-                                    <img id="preview-image" alt="Display preview media">
-                                    <video id="preview-video" muted loop playsinline></video>
-                                    <div id="preview-media-grid" class="loop-preview-media-grid"></div>
-                                    <div id="preview-placeholder" class="loop-preview-placeholder">
-                                        <p class="display-kicker">Promotional Media</p>
-                                        <h4>No slide selected.</h4>
-                                    </div>
-                                </div>
-                                <aside class="loop-preview-copy">
-                                    <p id="preview-status-label" class="display-kicker">Steelwrist Presents</p>
-                                    <h4 id="preview-headline"></h4>
-                                    <p id="preview-subheadline"></p>
-                                    <h5 id="preview-announcement"></h5>
-                                </aside>
-                            </section>
-                            <footer class="loop-preview-ticker">
-                                <p id="preview-ticker"></p>
-                            </footer>
+                        <div id="preview-root" class="tv-preview-viewport">
+                            <iframe id="preview-frame" class="tv-preview-frame"
+                                src="tvdisplay.html?preview=1&amp;v=20261021-1"
+                                title="Actual TV display preview" width="1920" height="1080"
+                                allow="autoplay" loading="eager"></iframe>
                         </div>
                     </section>
 
@@ -207,7 +199,7 @@
     </div>
 
     <script src="js/tvdisplay-config.js?v=20260527-15"></script>
-    <script type="module" src="js/tvadmin.js?v=20260928-1"></script>
+    <script type="module" src="js/tvadmin.js?v=20261021-1"></script>
 </body>
 
 </html>

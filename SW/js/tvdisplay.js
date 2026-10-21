@@ -1,3 +1,6 @@
+import { getPlayableItems, shouldShowMediaGroup, clampCropValue, clampPercent, clampMediaSize, clampCropZoom, findPlaybackIndex } from "./tvdisplay-model.js?v=20261021-1";
+import { createDisplayAudio } from "./tvdisplay-audio.js?v=20261021-2";
+
 const baseConfig = {
     storageMode: "cloudflare",
     apiBaseUrl: "",
@@ -12,6 +15,9 @@ const config = {
 
 const DISPLAY_KEY = "sw-tv-display:state";
 const REFRESH_MS = 8000;
+const isPreview = window.parent !== window && new URLSearchParams(window.location.search).get("preview") === "1";
+let previewRevision = 0;
+let previewCropDrag = null;
 const BACKGROUND_FRAME_MS = {
     high: 100,
     medium: 180,
@@ -47,6 +53,7 @@ const elements = {
     subheadline: document.getElementById("display-subheadline"),
     promoImage: document.getElementById("promo-image"),
     promoVideo: document.getElementById("promo-video"),
+    promoMediaShell: document.getElementById("promo-media-shell"),
     promoMediaGrid: document.getElementById("promo-media-grid"),
     promoPlaceholder: document.getElementById("promo-placeholder"),
     promoCopy: document.querySelector(".promo-copy"),
@@ -62,8 +69,11 @@ const playerState = {
     renderedItemKey: "",
     playlistKey: "",
     lastBackgroundFrame: 0,
-    performanceMode: "high"
+    performanceMode: "high",
+    renderGeneration: 0
 };
+
+const displayAudio = createDisplayAudio(document.getElementById("display-audio-toggle"));
 
 function animateBackground() {
     if (playerState.performanceMode === "low") {
@@ -209,7 +219,7 @@ function formatUpdated(value) {
     }).format(date)}`;
 }
 
-function render(display) {
+function render(display, selection = null) {
     const nextPlaylist = getPlayableItems(display);
     const nextPlaylistKey = getPlaylistKey(nextPlaylist);
     const playlistChanged = nextPlaylistKey !== playerState.playlistKey;
@@ -222,9 +232,13 @@ function render(display) {
         playerState.renderedItemKey = "";
     }
 
+    if (selection) {
+        playerState.index = findPlaybackIndex(nextPlaylist, selection.slideId, selection.mediaIndex);
+    }
     renderBrandText(elements.statusLabel, display.statusLabel || defaultDisplay.statusLabel);
     renderBrandText(elements.ticker, display.ticker || "");
     renderCurrentPlaylistItem();
+    scheduleTickerFit();
     if (playlistChanged || !playerState.timer) {
         scheduleNextItem();
     }
@@ -245,93 +259,6 @@ function renderBrandText(element, value) {
         logo.alt = "Steelwrist";
         return logo;
     }));
-}
-
-function getPlayableItems(display) {
-    const playlist = Array.isArray(display.playlist) ? display.playlist : [];
-    const playable = playlist.flatMap((slide, slideIndex) => {
-        if (Array.isArray(slide?.mediaItems)) {
-            const mediaItems = slide.mediaItems.filter(media => media?.url);
-            if (mediaItems.length === 0) {
-                return [{
-                    ...slide,
-                    id: slide.id || `slide-${slideIndex}`,
-                    mediaSequenceIndex: 0,
-                    mediaSequenceTotal: 0,
-                    title: slide.title || `Slide ${slideIndex + 1}`,
-                    mediaType: "image",
-                    url: ""
-                }];
-            }
-
-            if (shouldShowMediaGroup(slide, mediaItems)) {
-                return [{
-                    ...slide,
-                    id: slide.id || `slide-${slideIndex}`,
-                    slideId: slide.id || `slide-${slideIndex}`,
-                    mediaItems: mediaItems.map(media => ({
-                        ...media,
-                        cropX: clampCropValue(media.cropX),
-                        cropY: clampCropValue(media.cropY),
-                        size: clampMediaSize(media.size),
-                        zoom: clampCropZoom(media.zoom)
-                    })),
-                    mediaType: "group",
-                    url: "",
-                    durationSeconds: slide.durationSeconds || 0
-                }];
-            }
-
-            return mediaItems.map((media, mediaIndex) => ({
-                ...slide,
-                id: `${slide.id || `slide-${slideIndex}`}:${media.id || mediaIndex}`,
-                slideId: slide.id || `slide-${slideIndex}`,
-                mediaId: media.id || "",
-                mediaSequenceIndex: mediaIndex,
-                mediaSequenceTotal: mediaItems.length,
-                title: media.title || slide.title || `Slide ${slideIndex + 1}`,
-                mediaType: media.mediaType || "image",
-                url: media.url || "",
-                cropX: clampCropValue(media.cropX),
-                cropY: clampCropValue(media.cropY),
-                size: clampMediaSize(media.size),
-                zoom: clampCropZoom(media.zoom),
-                durationSeconds: slide.mediaDurationSeconds || slide.durationSeconds || 0
-            }));
-        }
-
-        if (slide?.url) {
-            return [slide];
-        }
-
-        return [];
-    });
-    if (playable.length > 0) {
-        return playable;
-    }
-
-    if (display.mediaUrl) {
-        return [{
-            id: "legacy-media",
-            title: display.mediaAlt || "Promotional media",
-            mediaType: display.mediaType || "image",
-            url: display.mediaUrl,
-            durationSeconds: display.slideDurationSeconds || 12,
-            layoutMode: "split",
-            headline: display.headline || "",
-            subheadline: display.subheadline || "",
-            announcement: display.announcement || ""
-        }];
-    }
-
-    return [];
-}
-
-function shouldShowMediaGroup(slide, mediaItems) {
-    if (!Array.isArray(mediaItems) || mediaItems.length <= 1) return false;
-    if (slide?.mediaLayout === "side-by-side") return true;
-    if (slide?.mediaLayout === "rotate") return false;
-    return mediaItems.some(media => Number.isFinite(Number(media?.size)) && Number(media.size) !== 100);
 }
 
 function getPlaylistKey(playlist) {
@@ -374,6 +301,7 @@ function getPlaylistKey(playlist) {
 }
 
 function renderCurrentPlaylistItem() {
+    const generation = ++playerState.renderGeneration;
     const item = playerState.playlist[playerState.index] || null;
     const mediaUrl = item?.url || "";
     const isVideo = item?.mediaType === "video";
@@ -381,14 +309,18 @@ function renderCurrentPlaylistItem() {
 
     if (itemKey !== playerState.renderedItemKey) {
         playerState.renderedItemKey = itemKey;
-        renderMediaWithTransition(item, mediaUrl, isVideo);
+        renderMediaWithTransition(item, mediaUrl, isVideo, generation);
         return;
     }
 
     applyMedia(item, mediaUrl, isVideo);
 }
 
-function renderMediaWithTransition(item, mediaUrl, isVideo) {
+function renderMediaWithTransition(item, mediaUrl, isVideo, generation) {
+    if (isPreview) {
+        applyMedia(item, mediaUrl, isVideo);
+        return;
+    }
     if (!mediaUrl || isVideo) {
         applyMedia(item, mediaUrl, isVideo);
         runSlideTransition(item);
@@ -404,10 +336,12 @@ function renderMediaWithTransition(item, mediaUrl, isVideo) {
         } catch {
             // The browser can still paint the loaded image if decode is unavailable or rejected.
         }
+        if (generation !== playerState.renderGeneration) return;
         applyMedia(item, mediaUrl, isVideo);
         runSlideTransition(item);
     };
     image.onerror = () => {
+        if (generation !== playerState.renderGeneration) return;
         applyMedia(item, mediaUrl, isVideo);
         runSlideTransition(item);
     };
@@ -431,6 +365,7 @@ function applyMedia(item, mediaUrl, isVideo) {
     elements.root.style.setProperty("--text-percent", `${100 - clampPercent(item?.mediaPercent, 68)}%`);
     applySlideBackgroundStyles(elements.root, item);
     renderSlideText(item);
+    scheduleTickerFit();
 
     const mediaItems = Array.isArray(item?.mediaItems) ? item.mediaItems.filter(media => media?.url) : [];
     const isMediaGroup = item?.mediaType === "group" || shouldShowMediaGroup(item, mediaItems);
@@ -452,6 +387,7 @@ function applyMedia(item, mediaUrl, isVideo) {
     elements.promoVideo.classList.toggle("hidden", !mediaUrl || !isVideo);
 
     if (!mediaUrl) {
+        displayAudio.setVideos([]);
         elements.promoImage.removeAttribute("src");
         elements.promoVideo.removeAttribute("src");
         elements.promoImage.style.objectPosition = "";
@@ -467,13 +403,14 @@ function applyMedia(item, mediaUrl, isVideo) {
         if (elements.promoVideo.getAttribute("src") !== mediaUrl) {
             elements.promoVideo.src = mediaUrl;
             elements.promoVideo.load();
-            elements.promoVideo.play().catch(() => undefined);
         }
+        displayAudio.setVideos([elements.promoVideo]);
         applyCropStyles(elements.promoVideo, item);
         elements.promoImage.removeAttribute("src");
         return;
     }
 
+    displayAudio.setVideos([]);
     if (elements.promoImage.getAttribute("src") !== mediaUrl) {
         elements.promoImage.src = mediaUrl;
     }
@@ -484,9 +421,10 @@ function applyMedia(item, mediaUrl, isVideo) {
 
 function renderDisplayMediaGrid(mediaItems) {
     elements.promoMediaGrid.replaceChildren();
+    const videos = [];
     elements.promoMediaGrid.dataset.count = String(mediaItems.length);
     elements.promoMediaGrid.style.gridTemplateColumns = getMediaGridTemplate(mediaItems);
-    mediaItems.forEach(media => {
+    mediaItems.forEach((media, index) => {
         const cell = document.createElement("div");
         cell.className = "promo-media-cell";
         const element = media.mediaType === "video" ? document.createElement("video") : document.createElement("img");
@@ -496,39 +434,17 @@ function renderDisplayMediaGrid(mediaItems) {
             element.autoplay = true;
             element.playsInline = true;
             element.src = media.url;
-            element.play().catch(() => undefined);
+            videos.push(element);
         } else {
             element.src = media.url;
             element.alt = media.title || "Promotional media";
         }
+        element.dataset.mediaIndex = String(index);
         applyCropStyles(element, media);
         cell.appendChild(element);
         elements.promoMediaGrid.appendChild(cell);
     });
-}
-
-function clampCropValue(value) {
-    const number = Number.parseFloat(value);
-    if (Number.isNaN(number)) return 50;
-    return Math.max(0, Math.min(100, number));
-}
-
-function clampPercent(value, fallback = 50) {
-    const number = Number.parseInt(value, 10);
-    if (Number.isNaN(number)) return fallback;
-    return Math.max(25, Math.min(80, number));
-}
-
-function clampMediaSize(value) {
-    const number = Number.parseInt(value, 10);
-    if (Number.isNaN(number)) return 100;
-    return Math.max(25, Math.min(300, number));
-}
-
-function clampCropZoom(value) {
-    const number = Number.parseInt(value, 10);
-    if (Number.isNaN(number)) return 120;
-    return Math.max(100, Math.min(250, number));
+    displayAudio.setVideos(videos);
 }
 
 function normalizeColor(value, fallback = "#020403") {
@@ -612,7 +528,7 @@ function updateMediaCutout() {
 function scheduleNextItem() {
     window.clearTimeout(playerState.timer);
     playerState.timer = null;
-    if (playerState.playlist.length <= 1) {
+    if (isPreview || playerState.playlist.length <= 1) {
         return;
     }
 
@@ -650,23 +566,110 @@ async function refresh() {
     }
 }
 
+let tickerFitFrame = null;
+
+function scheduleTickerFit() {
+    window.cancelAnimationFrame(tickerFitFrame);
+    tickerFitFrame = window.requestAnimationFrame(fitTicker);
+}
+
+function fitTicker() {
+    const ticker = elements.ticker;
+    ticker.style.fontSize = "";
+    if (!ticker.textContent.trim() || !ticker.clientWidth) return;
+    const strip = ticker.parentElement;
+    const stripStyle = getComputedStyle(strip);
+    const availableHeight = strip.clientHeight - parseFloat(stripStyle.paddingTop) - parseFloat(stripStyle.paddingBottom);
+    let high = parseFloat(getComputedStyle(ticker).fontSize);
+    let low = 1;
+    const fits = () => ticker.scrollWidth <= ticker.clientWidth && ticker.scrollHeight <= availableHeight;
+    if (fits()) return;
+    for (let step = 0; step < 14; step++) {
+        const size = (low + high) / 2;
+        ticker.style.fontSize = `${size}px`;
+        if (fits()) low = size;
+        else high = size;
+    }
+    ticker.style.fontSize = `${low}px`;
+}
+
+function sendPreviewCrop(phase) {
+    const drag = previewCropDrag;
+    if (!drag) return;
+    window.parent.postMessage({
+        type: "sw-display-preview:crop", revision: previewRevision, phase,
+        slideId: drag.slideId, mediaId: drag.mediaId, mediaIndex: drag.mediaIndex,
+        cropX: drag.media.cropX, cropY: drag.media.cropY
+    }, window.location.origin);
+}
+
+function setupPreview() {
+    document.body.dataset.preview = "true";
+    window.addEventListener("message", event => {
+        if (event.origin !== window.location.origin || event.source !== window.parent) return;
+        const message = event.data;
+        if (message?.type !== "sw-display-preview:render" || !Array.isArray(message.display?.playlist)) return;
+        previewRevision = message.revision;
+        previewCropDrag = null;
+        render({ ...defaultDisplay, ...message.display }, message.selection);
+    });
+    elements.promoMediaShell.addEventListener("pointerdown", event => {
+        if (event.button !== 0) return;
+        const target = event.target.closest("img");
+        const item = playerState.playlist[playerState.index];
+        if (!target || !item) return;
+        const group = item.mediaType === "group";
+        const mediaIndex = group ? Number(target.dataset.mediaIndex) : (item.mediaSequenceIndex || 0);
+        const media = group ? item.mediaItems[mediaIndex] : item;
+        if (!media?.url || media.mediaType === "video") return;
+        event.preventDefault();
+        const box = (target.closest(".promo-media-cell") || elements.promoMediaShell).getBoundingClientRect();
+        previewCropDrag = {
+            pointerId: event.pointerId, target, box, media,
+            mediaIndex, mediaId: media.id && group ? media.id : item.mediaId,
+            slideId: item.slideId || item.id,
+            startX: event.clientX, startY: event.clientY,
+            cropX: clampCropValue(media.cropX), cropY: clampCropValue(media.cropY)
+        };
+        target.setPointerCapture(event.pointerId);
+        sendPreviewCrop("start");
+    });
+    elements.promoMediaShell.addEventListener("pointermove", event => {
+        const drag = previewCropDrag;
+        if (!drag || event.pointerId !== drag.pointerId) return;
+        drag.media.cropX = clampCropValue(drag.cropX - (event.clientX - drag.startX) / Math.max(drag.box.width, 1) * 100);
+        drag.media.cropY = clampCropValue(drag.cropY - (event.clientY - drag.startY) / Math.max(drag.box.height, 1) * 100);
+        applyCropStyles(drag.target, drag.media);
+        sendPreviewCrop("move");
+    });
+    const endDrag = event => {
+        const drag = previewCropDrag;
+        if (!drag || event.pointerId !== drag.pointerId) return;
+        if (drag.target.hasPointerCapture(event.pointerId)) drag.target.releasePointerCapture(event.pointerId);
+        sendPreviewCrop("end");
+        previewCropDrag = null;
+    };
+    elements.promoMediaShell.addEventListener("pointerup", endDrag);
+    elements.promoMediaShell.addEventListener("pointercancel", endDrag);
+    window.parent.postMessage({ type: "sw-display-preview:ready" }, window.location.origin);
+}
+
 window.addEventListener("storage", event => {
-    if (event.key === DISPLAY_KEY) {
-        if (!(config.storageMode === "cloudflare" && config.apiBaseUrl)) {
-            render(readLocalDisplay());
-        }
+    if (!isPreview && event.key === DISPLAY_KEY && !(config.storageMode === "cloudflare" && config.apiBaseUrl)) {
+        render(readLocalDisplay());
     }
 });
+window.addEventListener("resize", () => { updateMediaCutout(); scheduleTickerFit(); });
+elements.root.addEventListener("load", scheduleTickerFit, true);
+document.fonts?.ready?.then(() => { updateMediaCutout(); scheduleTickerFit(); }).catch(() => undefined);
 
-window.addEventListener("resize", updateMediaCutout);
-document.fonts?.ready?.then(updateMediaCutout).catch(() => undefined);
-
-if (config.storageMode === "cloudflare" && config.apiBaseUrl) {
+if (isPreview) {
     render(defaultDisplay);
+    setupPreview();
 } else {
-    render(readLocalDisplay());
+    render(config.storageMode === "cloudflare" && config.apiBaseUrl ? defaultDisplay : readLocalDisplay());
+    refresh();
+    window.setInterval(refresh, REFRESH_MS);
 }
-refresh();
 runPerformanceProbe();
 animateBackground();
-window.setInterval(refresh, REFRESH_MS);

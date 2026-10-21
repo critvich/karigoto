@@ -1,3 +1,5 @@
+import { getPlayableItems, findPlaybackIndex, shouldShowMediaGroup, clampCropValue, clampPercent, clampMediaSize, clampCropZoom } from "./tvdisplay-model.js?v=20261021-1";
+
 const baseConfig = {
     storageMode: "cloudflare",
     apiBaseUrl: "",
@@ -71,16 +73,8 @@ const elements = {
     linkMediaType: document.getElementById("link-media-type"),
     preview: {
         root: document.getElementById("preview-root"),
-        mediaShell: document.getElementById("preview-media-shell"),
-        image: document.getElementById("preview-image"),
-        video: document.getElementById("preview-video"),
-        mediaGrid: document.getElementById("preview-media-grid"),
-        placeholder: document.getElementById("preview-placeholder"),
-        statusLabel: document.getElementById("preview-status-label"),
-        headline: document.getElementById("preview-headline"),
-        subheadline: document.getElementById("preview-subheadline"),
-        announcement: document.getElementById("preview-announcement"),
-        ticker: document.getElementById("preview-ticker"),
+        frame: document.getElementById("preview-frame"),
+        resolution: document.getElementById("preview-resolution"),
         prev: document.getElementById("preview-prev"),
         next: document.getElementById("preview-next"),
         counter: document.getElementById("preview-counter")
@@ -99,7 +93,8 @@ let playlist = [];
 let previewIndex = 0;
 let previewMediaIndex = 0;
 let selectedSlideshowId = "";
-let cropDrag = null;
+let previewRevision = 0;
+let previewPayload = null;
 
 function readStoredUser() {
     const stored = window.localStorage.getItem(USER_KEY);
@@ -214,7 +209,7 @@ function normalizeSlide(item, display = defaultDisplay, index = 0) {
         mediaDurationSeconds: item.mediaDurationSeconds || item.durationSeconds || 0,
         durationSeconds: item.durationSeconds || 0,
         layoutMode: normalizeLayoutMode(item.layoutMode),
-        mediaLayout: item.mediaLayout === "side-by-side" ? "side-by-side" : "rotate",
+        mediaLayout: shouldShowMediaGroup(item, mediaItems) ? "side-by-side" : "rotate",
         mediaSide: normalizeMediaSide(item.mediaSide),
         mediaPercent: clampPercent(item.mediaPercent, 68),
         backgroundColor: normalizeColor(item.backgroundColor),
@@ -264,47 +259,6 @@ function normalizeSlideMediaItem(item) {
     };
 }
 
-function clampCropValue(value) {
-    const number = Number.parseFloat(value);
-    if (Number.isNaN(number)) return 50;
-    return Math.max(0, Math.min(100, number));
-}
-
-function clampPercent(value, fallback = 50) {
-    const number = Number.parseInt(value, 10);
-    if (Number.isNaN(number)) return fallback;
-    return Math.max(25, Math.min(80, number));
-}
-
-function clampMediaSize(value) {
-    const number = Number.parseInt(value, 10);
-    if (Number.isNaN(number)) return 100;
-    return Math.max(25, Math.min(300, number));
-}
-
-function renderBrandText(element, value) {
-    const text = String(value || "");
-    const parts = text.split(/(steelwrist)/gi);
-
-    element.replaceChildren(...parts.filter(Boolean).map(part => {
-        if (part.toLowerCase() !== "steelwrist") {
-            return document.createTextNode(part);
-        }
-
-        const logo = document.createElement("img");
-        logo.className = "steelwrist-wordmark";
-        logo.src = "media/images/steelwrist_text_only.png";
-        logo.alt = "Steelwrist";
-        return logo;
-    }));
-}
-
-function clampCropZoom(value) {
-    const number = Number.parseInt(value, 10);
-    if (Number.isNaN(number)) return 120;
-    return Math.max(100, Math.min(250, number));
-}
-
 function normalizeColor(value, fallback = "#020403") {
     const color = String(value || "").trim();
     return /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : fallback;
@@ -320,13 +274,6 @@ function hexToRgbTriplet(value, fallback = "#2fb764") {
     const color = normalizeColor(value, fallback).slice(1);
     const number = Number.parseInt(color, 16);
     return `${(number >> 16) & 255} ${(number >> 8) & 255} ${number & 255}`;
-}
-
-function applySlideBackgroundStyles(element, slide) {
-    if (!element) return;
-    element.style.setProperty("--slide-bg", normalizeColor(slide?.backgroundColor));
-    element.style.setProperty("--slide-accent-rgb", hexToRgbTriplet(slide?.backgroundAccentColor));
-    element.style.setProperty("--slide-accent-strength", (clampAccentStrength(slide?.backgroundAccentStrength) / 100).toFixed(2));
 }
 
 function normalizeLayoutMode(value) {
@@ -350,10 +297,6 @@ function applyCropStyles(element, media) {
     element.style.objectPosition = cropPosition;
     element.style.transformOrigin = cropPosition;
     element.style.transform = `scale(${(clampCropZoom(media?.zoom) / 100).toFixed(3)})`;
-}
-
-function getMediaGridTemplate(mediaItems) {
-    return mediaItems.map(media => `${clampMediaSize(media?.size)}fr`).join(" ");
 }
 
 async function request(path, options = {}) {
@@ -1274,168 +1217,79 @@ function movePlaylistItem(index, direction) {
     renderPlaylist();
 }
 
+function resizeDisplayPreview() {
+    const [width, height] = elements.preview.resolution.value.split("x").map(Number);
+    const frame = elements.preview.frame;
+    frame.width = width;
+    frame.height = height;
+    frame.style.width = `${width}px`;
+    frame.style.height = `${height}px`;
+    frame.style.transform = `scale(${elements.preview.root.clientWidth / width})`;
+}
+
+function sendPreview() {
+    if (previewPayload) {
+        elements.preview.frame.contentWindow?.postMessage(previewPayload, window.location.origin);
+    }
+}
+
 function renderPreview() {
     const item = playlist[previewIndex] || null;
-    const media = getSelectedMedia(item);
-    const mediaItems = getSlideMediaItems(item).filter(mediaItem => mediaItem?.url);
-    const isSideBySide = item?.mediaLayout === "side-by-side" && mediaItems.length > 1;
-    const hasMedia = isSideBySide || Boolean(media?.url);
-    const isVideo = media?.mediaType === "video";
-    const hasCopy = Boolean(item?.statusLabel || item?.headline || item?.subheadline || item?.announcement);
-
+    const playable = getPlayableItems({ playlist });
+    const index = findPlaybackIndex(playable, item?.id, previewMediaIndex);
     const mediaCount = getSlideMediaItems(item).length;
+    const isGroup = playable[index]?.mediaType === "group";
     elements.preview.counter.textContent = playlist.length
-        ? `Slide ${previewIndex + 1} / ${playlist.length}${mediaCount ? ` - Media ${previewMediaIndex + 1} / ${mediaCount}` : ""}`
+        ? `Slide ${previewIndex + 1} / ${playlist.length}${mediaCount ? isGroup ? ` · ${mediaCount} media` : ` - Media ${previewMediaIndex + 1} / ${mediaCount}` : ""}`
         : "0 / 0";
-    elements.preview.prev.disabled = playlist.length <= 1;
-    elements.preview.next.disabled = playlist.length <= 1;
-    elements.preview.root.dataset.layout = getPreviewLayoutMode(item);
-    elements.preview.root.dataset.mediaSide = normalizeMediaSide(item?.mediaSide);
-    elements.preview.root.classList.toggle("has-slide-copy", hasCopy);
-    elements.preview.root.style.setProperty("--media-percent", `${clampPercent(item?.mediaPercent, 68)}%`);
-    elements.preview.root.style.setProperty("--text-percent", `${100 - clampPercent(item?.mediaPercent, 68)}%`);
-    applySlideBackgroundStyles(elements.preview.root, item);
-
-    renderBrandText(elements.preview.statusLabel, item?.statusLabel || "");
-    renderBrandText(elements.preview.headline, item?.headline || "");
-    renderBrandText(elements.preview.subheadline, item?.subheadline || "");
-    renderBrandText(elements.preview.announcement, item?.announcement || "");
-    renderBrandText(elements.preview.ticker, elements.fields.ticker.value.trim());
-
-    elements.preview.placeholder.classList.toggle("hidden", hasMedia);
-    elements.preview.mediaGrid.classList.toggle("hidden", !isSideBySide);
-    elements.preview.image.classList.toggle("hidden", !hasMedia || isVideo || isSideBySide);
-    elements.preview.video.classList.toggle("hidden", !hasMedia || !isVideo || isSideBySide);
-    elements.preview.mediaShell.classList.toggle("is-croppable", hasMedia && !isVideo && !isSideBySide);
-
-    if (isSideBySide) {
-        renderPreviewMediaGrid(mediaItems);
-        elements.preview.image.removeAttribute("src");
-        elements.preview.video.removeAttribute("src");
-        return;
-    }
-    elements.preview.mediaGrid.replaceChildren();
-
-    if (!hasMedia) {
-        elements.preview.image.removeAttribute("src");
-        elements.preview.video.removeAttribute("src");
-        elements.preview.image.style.objectPosition = "";
-        elements.preview.video.style.objectPosition = "";
-        elements.preview.image.style.transform = "";
-        elements.preview.video.style.transform = "";
-        elements.preview.image.style.transformOrigin = "";
-        elements.preview.video.style.transformOrigin = "";
-        return;
-    }
-
-    if (isVideo) {
-        if (elements.preview.video.getAttribute("src") !== media.url) {
-            elements.preview.video.src = media.url;
-            elements.preview.video.load();
+    elements.preview.prev.disabled = playable.length <= 1;
+    elements.preview.next.disabled = playable.length <= 1;
+    previewPayload = {
+        type: "sw-display-preview:render", revision: ++previewRevision,
+        selection: { slideId: item?.id || "", mediaIndex: previewMediaIndex },
+        display: {
+            ...defaultDisplay, playlist,
+            ticker: elements.fields.ticker.value.trim(),
+            slideDurationSeconds: Number(elements.fields.slideDurationSeconds.value) || 12
         }
-        applyCropStyles(elements.preview.video, media);
-        elements.preview.image.removeAttribute("src");
-        return;
-    }
-
-    if (elements.preview.image.getAttribute("src") !== media.url) {
-        elements.preview.image.src = media.url;
-    }
-    elements.preview.image.alt = media.title || item?.title || "Display preview media";
-    applyCropStyles(elements.preview.image, media);
-    elements.preview.video.removeAttribute("src");
-}
-
-function renderPreviewMediaGrid(mediaItems) {
-    elements.preview.mediaGrid.replaceChildren();
-    elements.preview.mediaGrid.dataset.count = String(mediaItems.length);
-    elements.preview.mediaGrid.style.gridTemplateColumns = getMediaGridTemplate(mediaItems);
-    mediaItems.forEach((media, index) => {
-        const cell = document.createElement("div");
-        cell.className = "loop-preview-media-cell";
-        const preview = createAssetPreview(media, { crop: true });
-        preview.classList.add("loop-preview-grid-media");
-        preview.dataset.mediaIndex = String(index);
-        preview.addEventListener("pointerdown", event => {
-            event.stopPropagation();
-            const slideMediaIndex = getSlideMediaItems(getSelectedSlide()).indexOf(media);
-            if (slideMediaIndex >= 0) {
-                previewMediaIndex = slideMediaIndex;
-            }
-            startCropDrag(event, media, preview);
-        });
-        cell.appendChild(preview);
-        elements.preview.mediaGrid.appendChild(cell);
-    });
-}
-
-function startCropDrag(event, dragMedia = getSelectedMedia(), dragElement = elements.preview.mediaShell) {
-    if (dragElement === elements.preview.mediaShell && event.target.closest(".loop-preview-media-grid")) {
-        return;
-    }
-    const media = dragMedia;
-    if (!media?.url || media.mediaType === "video") return;
-    event.preventDefault();
-    cropDrag = {
-        pointerId: event.pointerId,
-        media,
-        element: dragElement,
-        startX: event.clientX,
-        startY: event.clientY,
-        cropX: clampCropValue(media.cropX),
-        cropY: clampCropValue(media.cropY)
     };
-    dragElement.setPointerCapture(event.pointerId);
-    dragElement.classList.add("is-dragging");
-}
-
-function updateCropDrag(event) {
-    if (!cropDrag || event.pointerId !== cropDrag.pointerId) return;
-    const media = cropDrag.media;
-    if (!media) return;
-    const rect = cropDrag.element.getBoundingClientRect();
-    const deltaX = ((event.clientX - cropDrag.startX) / Math.max(rect.width, 1)) * 100;
-    const deltaY = ((event.clientY - cropDrag.startY) / Math.max(rect.height, 1)) * 100;
-    media.cropX = clampCropValue(cropDrag.cropX - deltaX);
-    media.cropY = clampCropValue(cropDrag.cropY - deltaY);
-    if (cropDrag.element === elements.preview.mediaShell) {
-        applyCropStyles(elements.preview.image, media);
-        applyCropStyles(elements.preview.video, media);
-    } else {
-        applyCropStyles(cropDrag.element, media);
-    }
-}
-
-function endCropDrag(event) {
-    if (!cropDrag || event.pointerId !== cropDrag.pointerId) return;
-    cropDrag.element.classList.remove("is-dragging");
-    cropDrag.element.releasePointerCapture(event.pointerId);
-    cropDrag = null;
-    renderPreview();
-    renderSlideSettings();
-}
-
-function getPreviewLayoutMode(item) {
-    return normalizeLayoutMode(item?.layoutMode);
+    resizeDisplayPreview();
+    sendPreview();
 }
 
 function movePreview(direction) {
-    if (playlist.length === 0) return;
-    const currentMediaCount = getSlideMediaItems(playlist[previewIndex]).length;
-    if (currentMediaCount > 1) {
-        const nextMediaIndex = previewMediaIndex + direction;
-        if (nextMediaIndex >= 0 && nextMediaIndex < currentMediaCount) {
-            previewMediaIndex = nextMediaIndex;
-            renderPreview();
-            return;
-        }
-    }
-
-    previewIndex = (previewIndex + direction + playlist.length) % playlist.length;
-    previewMediaIndex = direction > 0
-        ? 0
-        : Math.max(getSlideMediaItems(playlist[previewIndex]).length - 1, 0);
+    const playable = getPlayableItems({ playlist });
+    if (!playable.length) return;
+    const index = findPlaybackIndex(playable, playlist[previewIndex]?.id, previewMediaIndex);
+    const item = playable[(index + direction + playable.length) % playable.length];
+    const slideIndex = playlist.findIndex(slide => slide.id === (item.slideId || item.id));
+    if (slideIndex < 0) return;
+    previewIndex = slideIndex;
+    previewMediaIndex = item.mediaSequenceIndex || 0;
     renderPlaylist();
+}
+
+function handlePreviewMessage(event) {
+    if (event.origin !== window.location.origin || event.source !== elements.preview.frame.contentWindow) return;
+    const message = event.data;
+    if (message?.type === "sw-display-preview:ready") {
+        resizeDisplayPreview();
+        sendPreview();
+        return;
+    }
+    if (message?.type !== "sw-display-preview:crop" || message.revision !== previewRevision) return;
+    const slide = playlist[previewIndex];
+    if (!slide || slide.id !== message.slideId) return;
+    const mediaItems = getSlideMediaItems(slide).filter(media => media.url);
+    const media = mediaItems.find(media => media.id === message.mediaId) || mediaItems[message.mediaIndex];
+    if (!media || !Number.isFinite(message.cropX) || !Number.isFinite(message.cropY)) return;
+    previewMediaIndex = getSlideMediaItems(slide).indexOf(media);
+    media.cropX = clampCropValue(message.cropX);
+    media.cropY = clampCropValue(message.cropY);
+    if (message.phase === "end") {
+        renderPreview();
+        renderSlideSettings();
+    }
 }
 
 function escapeHtml(value) {
@@ -1604,10 +1458,10 @@ elements.slideRailAdd.addEventListener("click", addBlankSlide);
 elements.backToLoop.addEventListener("click", () => showAdminView("loop"));
 elements.preview.prev.addEventListener("click", () => movePreview(-1));
 elements.preview.next.addEventListener("click", () => movePreview(1));
-elements.preview.mediaShell.addEventListener("pointerdown", startCropDrag);
-elements.preview.mediaShell.addEventListener("pointermove", updateCropDrag);
-elements.preview.mediaShell.addEventListener("pointerup", endCropDrag);
-elements.preview.mediaShell.addEventListener("pointercancel", endCropDrag);
+elements.preview.frame.addEventListener("load", () => { resizeDisplayPreview(); sendPreview(); });
+elements.preview.resolution.addEventListener("change", () => { resizeDisplayPreview(); renderPreview(); });
+window.addEventListener("message", handlePreviewMessage);
+new ResizeObserver(resizeDisplayPreview).observe(elements.preview.root);
 elements.mediaLightbox.addEventListener("click", closeMediaLightbox);
 Object.values(elements.fields).forEach(input => {
     input.addEventListener("input", renderPreview);
