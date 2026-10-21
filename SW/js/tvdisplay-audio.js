@@ -1,24 +1,18 @@
-// Sound is opt-in for each display/preview window; it carries across its slides.
-export function createDisplayAudio(button) {
-    let enabled = false;
+// The admin panel owns the setting. The TV canvas has no playback controls.
+export function createDisplayAudio(onStatus = () => undefined) {
+    let muted = true;
+    let blocked = false;
     let videos = [];
     let revision = 0;
 
-    function updateButton() {
-        button.hidden = videos.length === 0;
-        button.textContent = enabled ? "Mute sound" : "Enable sound";
-        button.setAttribute("aria-pressed", String(enabled));
-    }
-
     function play(video, currentRevision) {
-        video.muted = !enabled;
+        video.muted = muted || blocked;
         video.play().catch(error => {
-            // A removed slide or an earlier click must not change current sound.
             if (currentRevision !== revision || !videos.includes(video)) return;
-            if (error.name !== "NotAllowedError" || !enabled) return;
-            enabled = false;
-            updateButton();
-            // Keep the slideshow running if audible autoplay is blocked.
+            if (error?.name !== "NotAllowedError" || muted || blocked) return;
+            blocked = true;
+            onStatus({ muted, blocked });
+            // Keep video playing while waiting for browser permission.
             videos.forEach(active => {
                 active.muted = true;
                 active.play().catch(() => undefined);
@@ -26,18 +20,26 @@ export function createDisplayAudio(button) {
         });
     }
 
-    button.addEventListener("click", () => {
-        enabled = !enabled;
+    function apply() {
         const currentRevision = ++revision;
-        updateButton();
-        // Call play synchronously within the gesture so audio can be unlocked.
         videos.forEach(video => play(video, currentRevision));
-    });
+    }
 
-    updateButton();
     return {
+        setMuted(nextMuted) {
+            if (muted === nextMuted) return;
+            muted = nextMuted;
+            blocked = false;
+            onStatus({ muted, blocked });
+            apply();
+        },
+        resume() {
+            if (muted || !blocked) return;
+            blocked = false;
+            onStatus({ muted, blocked });
+            apply();
+        },
         setVideos(nextVideos) {
-            const currentRevision = ++revision;
             videos.filter(video => !nextVideos.includes(video)).forEach(video => {
                 video.muted = true;
                 video.pause();
@@ -45,8 +47,7 @@ export function createDisplayAudio(button) {
                 video.load();
             });
             videos = nextVideos;
-            updateButton();
-            videos.forEach(video => play(video, currentRevision));
+            apply();
         }
     };
 }

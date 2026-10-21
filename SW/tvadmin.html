@@ -8,7 +8,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0"><title>SW TV Admin</title>
     <link rel="icon" type="image/png" href="media/images/invert%20logo.png?v=20260527-15">
-    <link rel="stylesheet" href="css/tvdisplay.css?v=20261021-1">
+    <link rel="stylesheet" href="css/tvdisplay.css?v=20261021-3">
 </head>
 
 <body class="admin-body">
@@ -111,7 +111,7 @@
 
                         <div id="preview-root" class="tv-preview-viewport">
                             <iframe id="preview-frame" class="tv-preview-frame"
-                                src="tvdisplay.html?preview=1&amp;v=20261021-1"
+                                src="tvdisplay.html?preview=1&amp;v=20261021-3"
                                 title="Actual TV display preview" width="1920" height="1080"
                                 allow="autoplay" loading="eager"></iframe>
                         </div>
@@ -124,6 +124,12 @@
                         </div>
                         <div id="slide-settings" class="slide-settings"></div>
                         <form id="display-form" class="display-form">
+                            <div class="field field-wide">
+                                <span>TV sound</span>
+                                <button id="tv-audio-toggle" class="button button-secondary" type="button" aria-pressed="false" disabled>Unmute TV</button>
+                                <p id="tv-audio-status" class="form-status" aria-live="polite">Loading sound setting...</p>
+                                <p class="admin-muted">Changes apply to the live TV. If its browser blocks sound, click the TV page once.</p>
+                            </div>
                             <label class="field">
                                 <span>Default slide seconds</span>
                                 <input id="slide-duration-seconds" type="number" min="3" max="300" step="1">
@@ -199,7 +205,7 @@
     </div>
 
     <script src="js/tvdisplay-config.js?v=20260527-15"></script>
-    <script type="module" src="js/tvadmin.js?v=20261021-1"></script>
+    <script type="module" src="js/tvadmin.js?v=20261021-3"></script>
 </body>
 
 </html>

@@ -56,6 +56,14 @@ export default {
         return deleteAccount(request, env, normalizeAccountCode(accountMatch[1]));
       }
 
+      if (path === "/api/display/audio" && request.method === "GET") {
+        return await getDisplayAudio(env);
+      }
+
+      if (path === "/api/display/audio" && request.method === "PATCH") {
+        return await updateDisplayAudio(request, env);
+      }
+
       if (path === "/api/display" && request.method === "GET") {
         return getDisplayState(env);
       }
@@ -640,6 +648,24 @@ async function deleteAccount(request, env, code) {
     .run();
 
   return json({ ok: true });
+}
+
+async function getDisplayAudio(env) {
+  const row = await env.boardbinding.prepare("SELECT muted, updated_at FROM tv_display_audio WHERE id = 'main'").first();
+  return json({ audio: { muted: row ? Boolean(row.muted) : true, updatedAt: row?.updated_at || "" } });
+}
+
+async function updateDisplayAudio(request, env) {
+  const auth = await requireAdmin(request, env);
+  if (!auth.ok) return auth.response;
+  const body = await readJson(request);
+  if (typeof body?.muted !== "boolean") return badRequest("muted must be a boolean.");
+  const updatedAt = new Date().toISOString();
+  await env.boardbinding.prepare(`
+    INSERT INTO tv_display_audio (id, muted, updated_at) VALUES ('main', ?, ?)
+    ON CONFLICT(id) DO UPDATE SET muted = excluded.muted, updated_at = excluded.updated_at
+  `).bind(body.muted ? 1 : 0, updatedAt).run();
+  return json({ audio: { muted: body.muted, updatedAt } });
 }
 
 function getDefaultDisplayState() {
@@ -1823,3 +1849,4 @@ async function cleanupWorkerState(env, workerCode) {
     .bind(workerCode, getIsoDaysAgo(30))
     .run();
 }
+

@@ -25,6 +25,12 @@ CREATE TABLE IF NOT EXISTS tv_display_state (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS tv_display_audio (
+  id TEXT PRIMARY KEY,
+  muted INTEGER NOT NULL DEFAULT 1 CHECK (muted IN (0, 1)),
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS media_assets (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,

@@ -1,5 +1,5 @@
 import { getPlayableItems, shouldShowMediaGroup, clampCropValue, clampPercent, clampMediaSize, clampCropZoom, findPlaybackIndex } from "./tvdisplay-model.js?v=20261021-1";
-import { createDisplayAudio } from "./tvdisplay-audio.js?v=20261021-2";
+import { createDisplayAudio } from "./tvdisplay-audio.js?v=20261021-3";
 
 const baseConfig = {
     storageMode: "cloudflare",
@@ -14,6 +14,7 @@ const config = {
 };
 
 const DISPLAY_KEY = "sw-tv-display:state";
+const AUDIO_KEY = "sw-tv-display:audio";
 const REFRESH_MS = 8000;
 const isPreview = window.parent !== window && new URLSearchParams(window.location.search).get("preview") === "1";
 let previewRevision = 0;
@@ -73,7 +74,29 @@ const playerState = {
     renderGeneration: 0
 };
 
-const displayAudio = createDisplayAudio(document.getElementById("display-audio-toggle"));
+const displayAudio = createDisplayAudio(status => {
+    if (isPreview) window.parent.postMessage({ type: "sw-display-preview:audio-status", ...status }, window.location.origin);
+});
+
+// Some browsers require one gesture on the TV device before permitting sound.
+window.addEventListener("pointerdown", () => displayAudio.resume());
+window.addEventListener("keydown", () => displayAudio.resume());
+
+async function refreshAudio() {
+    try {
+        let audio;
+        if (config.storageMode === "cloudflare" && config.apiBaseUrl) {
+            const response = await fetch(`${config.apiBaseUrl.replace(/\/+$/, "")}/api/display/audio`);
+            if (!response.ok) throw new Error("TV sound setting could not be loaded.");
+            audio = (await response.json()).audio;
+        } else {
+            audio = JSON.parse(window.localStorage.getItem(AUDIO_KEY) || "null");
+        }
+        displayAudio.setMuted(audio?.muted !== false);
+    } catch (error) {
+        console.error(error);
+    }
+}
 
 function animateBackground() {
     if (playerState.performanceMode === "low") {
@@ -608,7 +631,12 @@ function setupPreview() {
     window.addEventListener("message", event => {
         if (event.origin !== window.location.origin || event.source !== window.parent) return;
         const message = event.data;
+        if (message?.type === "sw-display-preview:audio" && typeof message.muted === "boolean") {
+            displayAudio.setMuted(message.muted);
+            return;
+        }
         if (message?.type !== "sw-display-preview:render" || !Array.isArray(message.display?.playlist)) return;
+        displayAudio.setMuted(message.audioMuted !== false);
         previewRevision = message.revision;
         previewCropDrag = null;
         render({ ...defaultDisplay, ...message.display }, message.selection);
@@ -655,6 +683,9 @@ function setupPreview() {
 }
 
 window.addEventListener("storage", event => {
+    if (!isPreview && event.key === AUDIO_KEY && !(config.storageMode === "cloudflare" && config.apiBaseUrl)) {
+        refreshAudio();
+    }
     if (!isPreview && event.key === DISPLAY_KEY && !(config.storageMode === "cloudflare" && config.apiBaseUrl)) {
         render(readLocalDisplay());
     }
@@ -669,7 +700,9 @@ if (isPreview) {
 } else {
     render(config.storageMode === "cloudflare" && config.apiBaseUrl ? defaultDisplay : readLocalDisplay());
     refresh();
+    refreshAudio();
     window.setInterval(refresh, REFRESH_MS);
+    window.setInterval(refreshAudio, REFRESH_MS);
 }
 runPerformanceProbe();
 animateBackground();

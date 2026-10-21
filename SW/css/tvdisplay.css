@@ -98,31 +98,6 @@ body {
     grid-template-rows: minmax(0, 1fr) auto;
 }
 
-.display-audio-toggle {
-    position: absolute;
-    top: max(8px, calc(var(--canvas-width-unit) * 0.8));
-    right: max(8px, calc(var(--canvas-width-unit) * 0.8));
-    z-index: 5;
-    min-height: 44px;
-    padding: 0.4em 0.8em;
-    border: 1px solid #79e18f;
-    border-radius: 0.6em;
-    background: #051008;
-    color: #f1fbf4;
-    font: inherit;
-    font-size: clamp(16px, calc(var(--canvas-width-unit) * 1.4), 54px);
-    cursor: pointer;
-}
-
-.display-audio-toggle[hidden] {
-    display: none;
-}
-
-.display-audio-toggle:focus-visible {
-    outline: 3px solid #f1fbf4;
-    outline-offset: 3px;
-}
-
 .display-root::before {
     content: "";
     position: absolute;

@@ -14,6 +14,7 @@ const config = {
 
 const apiBaseUrl = config.apiBaseUrl.replace(/\/+$/, "");
 const DISPLAY_KEY = "sw-tv-display:state";
+const AUDIO_KEY = "sw-tv-display:audio";
 const TOKEN_KEY = "sw-tv-display:token";
 const USER_KEY = "sw-tv-display:user";
 const MEDIA_KEY = "sw-tv-display:media";
@@ -48,6 +49,8 @@ const elements = {
     backToLoop: document.getElementById("back-to-loop"),
     form: document.getElementById("display-form"),
     saveStatus: document.getElementById("save-status"),
+    audioToggle: document.getElementById("tv-audio-toggle"),
+    audioStatus: document.getElementById("tv-audio-status"),
     refresh: document.getElementById("refresh-display"),
     refreshMedia: document.getElementById("refresh-media"),
     mediaStatus: document.getElementById("media-status"),
@@ -95,6 +98,57 @@ let previewMediaIndex = 0;
 let selectedSlideshowId = "";
 let previewRevision = 0;
 let previewPayload = null;
+let audioMuted = true;
+let audioRevision = 0;
+let audioSaving = false;
+
+function renderAudioSetting() {
+    elements.audioToggle.textContent = audioMuted ? "Unmute TV" : "Mute TV";
+    elements.audioToggle.setAttribute("aria-pressed", String(!audioMuted));
+    if (previewPayload) previewPayload.audioMuted = audioMuted;
+    elements.preview.frame.contentWindow?.postMessage({ type: "sw-display-preview:audio", muted: audioMuted }, window.location.origin);
+}
+
+async function loadAudioSetting() {
+    if (audioSaving) return;
+    const revision = ++audioRevision;
+    try {
+        const audio = config.storageMode === "cloudflare" && apiBaseUrl
+            ? (await request("/api/display/audio")).audio
+            : JSON.parse(window.localStorage.getItem(AUDIO_KEY) || "null");
+        if (revision !== audioRevision) return;
+        audioMuted = audio?.muted !== false;
+        renderAudioSetting();
+        elements.audioToggle.disabled = false;
+        setStatus(elements.audioStatus, audioMuted ? "TV sound is muted." : "TV sound is unmuted.");
+    } catch (error) {
+        if (revision === audioRevision) setStatus(elements.audioStatus, error.message, true);
+    }
+}
+
+elements.audioToggle.addEventListener("click", async () => {
+    const nextMuted = !audioMuted;
+    ++audioRevision;
+    audioSaving = true;
+    elements.audioToggle.disabled = true;
+    setStatus(elements.audioStatus, "Saving TV sound...");
+    try {
+        let audio = { muted: nextMuted };
+        if (config.storageMode === "cloudflare" && apiBaseUrl) {
+            audio = (await request("/api/display/audio", { method: "PATCH", auth: true, body: JSON.stringify(audio) })).audio;
+        } else {
+            window.localStorage.setItem(AUDIO_KEY, JSON.stringify(audio));
+        }
+        audioMuted = audio.muted;
+        renderAudioSetting();
+        setStatus(elements.audioStatus, audioMuted ? "TV sound muted. Applied within 8 seconds." : "TV sound unmuted. Applied within 8 seconds.");
+    } catch (error) {
+        setStatus(elements.audioStatus, error.message, true);
+    } finally {
+        audioSaving = false;
+        elements.audioToggle.disabled = false;
+    }
+});
 
 function readStoredUser() {
     const stored = window.localStorage.getItem(USER_KEY);
@@ -504,6 +558,7 @@ async function renameAsset(assetId, title) {
     writeLocalMedia(mediaAssets);
     return asset;
 }
+
 
 function fillForm(display) {
     Object.entries(elements.fields).forEach(([key, input]) => {
@@ -1246,6 +1301,7 @@ function renderPreview() {
     elements.preview.next.disabled = playable.length <= 1;
     previewPayload = {
         type: "sw-display-preview:render", revision: ++previewRevision,
+        audioMuted,
         selection: { slideId: item?.id || "", mediaIndex: previewMediaIndex },
         display: {
             ...defaultDisplay, playlist,
@@ -1272,6 +1328,10 @@ function movePreview(direction) {
 function handlePreviewMessage(event) {
     if (event.origin !== window.location.origin || event.source !== elements.preview.frame.contentWindow) return;
     const message = event.data;
+    if (message?.type === "sw-display-preview:audio-status" && message.blocked && !audioMuted) {
+        setStatus(elements.audioStatus, "TV sound is set to unmuted. Click the preview once to allow preview audio.");
+        return;
+    }
     if (message?.type === "sw-display-preview:ready") {
         resizeDisplayPreview();
         sendPreview();
@@ -1444,7 +1504,7 @@ elements.updateSlideshow.addEventListener("click", async () => {
     await overwriteSlideshow(selectedSlideshowId, existing?.title || "");
 });
 
-elements.refresh.addEventListener("click", loadDisplay);
+elements.refresh.addEventListener("click", () => { loadDisplay(); loadAudioSetting(); });
 elements.refreshMedia.addEventListener("click", fetchMediaAssets);
 elements.refreshSlideshows.addEventListener("click", fetchSlideshows);
 elements.clearPlaylist.addEventListener("click", () => {
@@ -1483,7 +1543,9 @@ elements.signOut.addEventListener("click", async () => {
     setStatus(elements.loginStatus, "Signed out.");
 });
 
+
 await initSession();
+await loadAudioSetting();
 renderAuth();
 if (token && user) {
     await Promise.all([loadDisplay(), fetchMediaAssets(), fetchSlideshows()]);
