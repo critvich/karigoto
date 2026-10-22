@@ -1,113 +1,45 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0"><title>.to/SW/workersearch</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <title>Parts lookup · Steelwrist</title>
     <link rel="icon" type="image/png" href="media/images/invert%20logo.png?v=20260527-15">
-    <link rel="stylesheet" href="css/workerboard.css?v=20260527-15">
-    <link rel="stylesheet" href="css/workersearch.css?v=20260527-15">
-    <script src="js/vendor/qrcode.min.js?v=20260527-15"></script>
-    <script src="js/vendor/jspdf.umd.min.js?v=20260527-15"></script>
+    <link rel="stylesheet" href="css/workersearch.css?v=20261022-1">
+    <script defer src="js/vendor/qrcode.min.js?v=20260527-15"></script>
+    <script defer src="js/vendor/jspdf.umd.min.js?v=20260527-15"></script>
+    <script type="module" src="js/workersearch.js?v=20261022-1"></script>
 </head>
-
 <body>
-    <header class="worker-header search-header">
-        <div class="worker-brand">
-            <p class="brand-path">.to / <a href="../SW.html">SW</a> / workersearch</p>
-            <h1 id="worker-title">Worker Parts</h1>
-        </div>
-        <div class="account-area">
-            <div class="account-toolbar">
-                <button id="account-request-toggle" class="account-toggle" type="button" aria-expanded="false" aria-controls="account-panel">Create account</button>
-                <button id="account-toggle" class="account-toggle" type="button" aria-expanded="false" aria-controls="account-panel">Sign in</button>
-            </div>
-            <div id="account-panel" class="account-panel hidden">
-                <button id="account-panel-close" class="account-panel-close" type="button" aria-label="Close account panel">Close</button>
-                <p id="account-summary" class="account-summary">Not signed in</p>
-                <form id="account-form" class="account-form">
-                    <label class="field">
-                        <span>Account code</span>
-                        <input id="account-email" type="text" autocomplete="username" placeholder="ABCD or admin">
-                    </label>
-                    <label class="field">
-                        <span>Password</span>
-                        <input id="account-password" type="password" autocomplete="current-password" placeholder="Password">
-                    </label>
-                    <div class="inline-actions">
-                        <button id="account-submit" type="submit" class="button button-primary">Sign in</button>
-                        <button id="account-signout" type="button" class="button button-secondary hidden">Sign out</button>
-                    </div>
-                    <p id="account-status" class="form-status" aria-live="polite"></p>
-                </form>
-                <form id="account-request-form" class="account-form account-request-form hidden">
-                    <p class="account-section-title">Create account</p>
-                    <label class="field">
-                        <span>4 letter code</span>
-                        <input id="request-code" type="text" inputmode="latin" maxlength="4" autocomplete="username" placeholder="ABCD">
-                    </label>
-                    <label class="field">
-                        <span>Password</span>
-                        <input id="request-password" type="password" autocomplete="new-password" placeholder="Choose a password">
-                    </label>
-                    <button id="request-submit" type="submit" class="button button-secondary">Request account</button>
-                    <p id="request-status" class="form-status" aria-live="polite"></p>
-                </form>
-            </div>
-        </div>
+    <a class="skip-link" href="#parts-list">Skip to parts</a>
+    <header class="site-header page-width">
+        <a class="brand" href="../SW.html" aria-label="Steelwrist home"><span class="brand-mark">SW</span><span>Steelwrist</span></a>
+        <a class="home-link" href="../SW.html">SW home <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a>
     </header>
-
-    <main class="worker-shell worker-search-shell">
-        <section class="current-banner search-banner">
-            <div class="banner-copy">
-                <p class="eyebrow">Part Lookup</p>
-                <h2>Search Steelwrist parts</h2>
-                <p class="hero-detail">Load one part or add rows for multiple parts.</p>
-            </div>
-            <div class="banner-side search-upload auth-only hidden">
-                <label class="field">
-                    <span>Import XML</span>
-                    <input id="xml-upload" type="file" accept=".xml" />
-                </label>
+    <main class="page-width">
+        <section class="page-intro" aria-labelledby="page-title">
+            <div><h1 id="page-title">Parts lookup</h1><p>Find part images, portal links, and stock locations.</p></div>
+            <div class="page-actions">
+                <button id="import-xml" class="button button-secondary" type="button">Import XML</button>
+                <input id="xml-upload" class="visually-hidden" type="file" accept=".xml,application/xml,text/xml" tabindex="-1" aria-label="Import XML file">
+                <button id="download-qr-pdf" class="button button-secondary" type="button">QR PDF</button>
             </div>
         </section>
-
-        <section class="board-space search-board">
-            <div class="board-heading">
-                <div>
-                    <p class="eyebrow">Search</p>
-                    <h2>Parts queue</h2>
-                </div>
-                <p id="signed-out-note" class="board-note">Each row can load a part image and portal link.</p>
+        <p id="page-status" class="page-status" role="status"></p>
+        <section aria-labelledby="parts-heading">
+            <div class="list-toolbar">
+                <div class="list-title"><h2 id="parts-heading">Parts</h2><span id="parts-count">1 part</span><span id="order-summary" hidden></span></div>
+                <button id="add-part-row" class="button button-secondary" type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add part</button>
             </div>
-
-            <div class="search-toolbar">
-                <button id="add-part-row" class="button button-primary" type="button">Add Row</button>
-                <div class="share-panel auth-only hidden">
-                    <div>
-                        <p class="eyebrow">Share</p>
-                        <p class="hero-meta">Create a PDF with a QR code for the current link.</p>
-                    </div>
-                    <button id="download-qr-pdf" class="button button-secondary" type="button">Open QR PDF</button>
-                </div>
-            </div>
-
-            <div class="base">
-                <div id="section0" class="slider">
-                    <section class="page search-page">
-                        <div id="parts-list"></div>
-                    </section>
-                </div>
-            </div>
+            <div id="parts-list" tabindex="-1"></div>
+            <div id="empty-list" class="empty-list" hidden><p>No parts in this list.</p><button id="empty-add-part" class="button button-secondary" type="button">Add a part</button></div>
         </section>
+        <p class="stock-note">Stock comes from the latest uploaded inventory file.</p>
     </main>
-
-    <div id="imgund" class="imgunderlay" style="display: none;"></div>
-    <script src="js/workerboard-config.js?v=20260527-15"></script>
-    <script src="js/main.js?v=20260527-15"></script>
+    <dialog id="image-dialog" class="image-dialog" aria-label="Part image">
+        <button id="close-image" class="button button-secondary" type="button">Close</button>
+        <img id="expanded-image" alt="">
+    </dialog>
 </body>
-
 </html>
