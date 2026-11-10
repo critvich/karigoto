@@ -1,53 +1,55 @@
-function parseCsvLine(line) {
-    const values = [];
-    let currentValue = "";
-    let isInsideQuotes = false;
-
-    for (let index = 0; index < line.length; index += 1) {
-        const character = line[index];
-        const nextCharacter = line[index + 1];
-
-        if (character === '"' && isInsideQuotes && nextCharacter === '"') {
-            currentValue += '"';
+function parseCsvRecords(csvText) {
+    const records = [];
+    let record = [];
+    let value = "";
+    let quoted = false;
+    const text = csvText.replace(/^\uFEFF/, "");
+    for (let index = 0; index < text.length; index += 1) {
+        const character = text[index];
+        if (character === '"' && quoted && text[index + 1] === '"') {
+            value += '"';
             index += 1;
         } else if (character === '"') {
-            isInsideQuotes = !isInsideQuotes;
-        } else if (character === "," && !isInsideQuotes) {
-            values.push(currentValue);
-            currentValue = "";
+            quoted = !quoted;
+        } else if (character === "," && !quoted) {
+            record.push(value);
+            value = "";
+        } else if ((character === "\n" || character === "\r") && !quoted) {
+            record.push(value);
+            if (record.some(field => field.trim())) records.push(record);
+            record = [];
+            value = "";
+            if (character === "\r" && text[index + 1] === "\n") index += 1;
         } else {
-            currentValue += character;
+            value += character;
         }
     }
-
-    values.push(currentValue);
-    return values;
+    record.push(value);
+    if (record.some(field => field.trim())) records.push(record);
+    return records;
 }
 
 export function parseStockCsv(csvText) {
-    const lines = csvText
-        .replace(/^\uFEFF/, "")
-        .split(/\r?\n/)
-        .filter(line => line.trim());
-
-    if (lines.length < 2) return [];
-
-    const headers = parseCsvLine(lines[0]).map(header => header.trim());
-
-    return lines.slice(1).map(line => {
-        const values = parseCsvLine(line);
-        const row = headers.reduce((record, header, index) => {
-            record[header] = values[index]?.trim() || "";
-            return record;
-        }, {});
-
+    const [headers, ...records] = parseCsvRecords(csvText);
+    if (!headers) return [];
+    const columns = headers.map(header => header.trim());
+    return records.map(values => {
+        const row = Object.fromEntries(columns.map((header, index) => [header, values[index]?.trim() || ""]));
         return {
-            partNumber: String(row["Part number"] || "").toUpperCase(),
+            partNumber: normalizePartNumber(row["Part number"]),
             partName: row["Part name"],
             location: row.Location,
-            balance: row.Balance
+            balance: row.Balance || row["Curr. bal."] || "",
+            serialNumber: row["Serial number"] || ""
         };
     }).filter(row => row.partNumber);
+}
+
+// Serial identifiers remain strings: leading zeroes and letters are significant.
+export function findStockRows(rows, value, type = "part") {
+    const key = type === "serial" ? "serialNumber" : "partNumber";
+    const query = normalizePartNumber(value);
+    return query ? rows.filter(row => normalizePartNumber(row[key]) === query) : [];
 }
 
 function getFirstTextContent(xmlDoc, selectors) {
@@ -178,11 +180,13 @@ export function stockBalance(rows) {
     }, 0);
 }
 
-export function buildPartsUrl(href, parts, orderNumber = "") {
+export function buildPartsUrl(href, parts, orderNumber = "", serials = []) {
     const source = new URL(href);
     const url = new URL(source.pathname, source.origin);
     const values = parts.map(normalizePartNumber).filter(Boolean);
     if (values.length) url.searchParams.set("parts", values.join(","));
+    const serialValues = serials.map(normalizePartNumber).filter(Boolean);
+    if (serialValues.length) url.searchParams.set("serials", serialValues.join(","));
     if (orderNumber) url.searchParams.set("order", orderNumber);
     return url;
 }

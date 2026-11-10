@@ -1,4 +1,4 @@
-import { parseStockCsv, parsePartsFromXml, normalizePartNumber, stockBalance, buildPartsUrl } from "./workersearch-data.js?v=20261022-1";
+import { parseStockCsv, parsePartsFromXml, normalizePartNumber, findStockRows, stockBalance, buildPartsUrl } from "./workersearch-data.js?v=20261110-1";
 
 const PART_API = "https://swpartfetch.bbourne1104.workers.dev";
 const list = document.getElementById("parts-list");
@@ -29,31 +29,37 @@ function setPageStatus(message, error = false) {
     pageStatus.classList.toggle("is-error", error);
 }
 
-function values() {
-    return [...list.querySelectorAll(".part-input")].map(input => normalizePartNumber(input.value)).filter(Boolean);
+function values(type) {
+    return [...list.children].filter(row => !type || row.querySelector(".lookup-kind").value === type)
+        .map(row => normalizePartNumber(row.querySelector(".part-input").value)).filter(Boolean);
+}
+
+function shareUrl() {
+    return buildPartsUrl(location.href, values("part"), orderNumber, values("serial"));
 }
 
 function updateList() {
     const rows = [...list.children];
     rows.forEach((row, index) => {
         row.querySelector(".row-number").textContent = String(index + 1).padStart(2, "0");
-        row.querySelector(".part-remove-btn").setAttribute("aria-label", `Remove part ${index + 1}`);
-        row.querySelector(".part-input").setAttribute("aria-label", `Part number ${index + 1}`);
+        row.querySelector(".part-remove-btn").setAttribute("aria-label", `Remove lookup ${index + 1}`);
+        row.querySelector(".lookup-kind").setAttribute("aria-label", `Search type ${index + 1}`);
+        row.querySelector(".part-input").setAttribute("aria-label", `${row.querySelector(".lookup-kind").value === "serial" ? "Serial" : "Part"} number ${index + 1}`);
     });
-    document.getElementById("parts-count").textContent = `${rows.length} ${rows.length === 1 ? "part" : "parts"}`;
+    document.getElementById("parts-count").textContent = `${rows.length} ${rows.length === 1 ? "lookup" : "lookups"}`;
     document.getElementById("empty-list").hidden = rows.length > 0;
     const orderSummary = document.getElementById("order-summary");
     orderSummary.textContent = orderNumber ? `Order ${orderNumber}` : "";
     orderSummary.hidden = !orderNumber;
     pdfButton.disabled = values().length === 0;
-    history.replaceState(null, "", buildPartsUrl(location.href, values(), orderNumber));
+    history.replaceState(null, "", shareUrl());
 }
 
 async function stockRows() {
     if (!stockPromise) {
         const controller = new AbortController();
         const timeout = window.setTimeout(() => controller.abort(), 10000);
-        stockPromise = fetch("data/stock-current.csv", { signal: controller.signal }).then(response => {
+        stockPromise = fetch("data/stock-current.csv?v=20261110-1", { signal: controller.signal }).then(response => {
             if (!response.ok) throw new Error("Stock file unavailable");
             return response.text();
         }).then(parseStockCsv).finally(() => window.clearTimeout(timeout)).catch(error => { stockPromise = null; throw error; });
@@ -64,10 +70,11 @@ async function stockRows() {
 function stockHtml(rows, unavailable) {
     if (unavailable) return '<p class="row-status">Stock data is temporarily unavailable. Search again to retry.</p>';
     if (!rows.length) return '<p class="row-status">No location found in the current stock file.</p>';
-    return `<table class="stock-table"><caption class="visually-hidden">Stock locations and balances</caption>
-        <thead><tr><th scope="col">Location</th><th scope="col">Balance</th></tr></thead>
-        <tbody>${rows.map(row => `<tr><td>${escapeHtml(row.location || "Not listed")}</td><td>${escapeHtml(row.balance)}</td></tr>`).join("")}</tbody>
-        <tfoot><tr><th scope="row">Total</th><td>${formatQuantity(stockBalance(rows))}</td></tr></tfoot></table>`;
+    const serialized = rows.some(row => row.serialNumber);
+    return `<table class="stock-table"><caption class="visually-hidden">Stock locations, ${serialized ? "serial numbers, and " : ""}balances</caption>
+        <thead><tr><th scope="col">Location</th>${serialized ? '<th scope="col">Serial number</th>' : ""}<th scope="col">Balance</th></tr></thead>
+        <tbody>${rows.map(row => `<tr><td>${escapeHtml(row.location || "Not listed")}</td>${serialized ? `<td class="serial-number">${escapeHtml(row.serialNumber || "—")}</td>` : ""}<td>${escapeHtml(row.balance)}</td></tr>`).join("")}</tbody>
+        <tfoot><tr><th scope="row"${serialized ? ' colspan="2"' : ""}>Total</th><td>${formatQuantity(stockBalance(rows))}</td></tr></tfoot></table>`;
 }
 
 function renderPart(result, part, number, rows, stockUnavailable) {
@@ -103,22 +110,28 @@ function renderPart(result, part, number, rows, stockUnavailable) {
     }
 }
 
-function createRow(initialValue = "", focus = false) {
+function createRow(initialValue = "", focus = false, initialType = "part") {
     const id = `part-${++nextRowId}`;
     const row = document.createElement("article");
     row.className = "part-row";
     row.innerHTML = `<form class="part-row-controls"><span class="row-number" aria-hidden="true"></span>
-        <label for="${id}">Part number</label><input id="${id}" class="part-input" type="text" placeholder="e.g. 100009" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="120" aria-describedby="${id}-result">
+        <label for="${id}-kind" class="visually-hidden">Search by</label><select id="${id}-kind" class="lookup-kind"><option value="part">Part number</option><option value="serial">Serial number</option></select>
+        <input id="${id}" class="part-input" type="text" placeholder="e.g. 100009" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="120" aria-describedby="${id}-result">
         <button class="button button-primary part-load-btn" type="submit" disabled>Search</button>
         <button class="part-remove-btn" type="button">Remove</button></form>
         <div id="${id}-result" class="part-result"><p class="row-status" role="status">Enter a part number to load its details.</p></div>`;
     const input = row.querySelector("input");
+    const kind = row.querySelector(".lookup-kind");
+    kind.value = initialType;
+    input.placeholder = kind.value === "serial" ? "e.g. M409669" : "e.g. 100009";
     const button = row.querySelector(".part-load-btn");
     const result = row.querySelector(".part-result");
     input.value = normalizePartNumber(initialValue);
     let requestRevision = 0;
     let controller;
     let loadedNumber = "";
+    const emptyMessage = () => `Enter a ${kind.value === "serial" ? "serial" : "part"} number to load its details.`;
+    result.querySelector(".row-status").textContent = emptyMessage();
 
     function cancel() {
         ++requestRevision;
@@ -133,6 +146,7 @@ function createRow(initialValue = "", focus = false) {
         if (!row.isConnected) return;
         const revision = requestRevision;
         const number = normalizePartNumber(input.value);
+        const type = kind.value;
         if (!number) {
             input.setAttribute("aria-invalid", "true");
             input.focus();
@@ -148,16 +162,58 @@ function createRow(initialValue = "", focus = false) {
         button.disabled = true;
         button.textContent = "Searching...";
         result.setAttribute("aria-busy", "true");
-        result.innerHTML = '<p class="row-status" role="status">Loading part...</p>';
+        result.innerHTML = '<p class="row-status" role="status">Loading details...</p>';
         // Stock failure must not hide otherwise valid part details.
-        const stockTask = stockRows().then(data => ({ rows: data.filter(item => item.partNumber === number), unavailable: false }), () => ({ rows: [], unavailable: true }));
+        const stockTask = stockRows().then(data => ({ rows: findStockRows(data, number, type), unavailable: false }), () => ({ rows: [], unavailable: true }));
         try {
-            const response = await fetch(`${PART_API}/?part=${encodeURIComponent(number)}`, { signal: controller.signal });
-            if (!response.ok) throw new Error("Lookup failed");
-            const [part, stock] = await Promise.all([response.json(), stockTask]);
+            // Serial numbers map to inventory parts, never to the part-number API directly.
+            const fetchPart = async partNumber => {
+                try {
+                    const response = await fetch(`${PART_API}/?part=${encodeURIComponent(partNumber)}`, { signal: requestController.signal });
+                    if (!response.ok) throw new Error("Lookup failed");
+                    return { part: await response.json(), portalUnavailable: false };
+                } catch (error) {
+                    return { part: { partNumber }, portalUnavailable: true };
+                }
+            };
+            const partTask = type === "part" ? fetchPart(number) : null;
+            const stock = await stockTask;
             if (revision !== requestRevision || !row.isConnected) return;
+            if (type === "serial" && (stock.unavailable || !stock.rows.length)) {
+                loadedNumber = number;
+                result.innerHTML = stock.unavailable
+                    ? '<p class="row-status is-error" role="status">Serial lookup needs the stock file, which is temporarily unavailable. Search again to retry.</p>'
+                    : '<p class="row-status" role="status">Serial number not found in the current inventory. Check the serial number and search again.</p>';
+                return;
+            }
+            const numbers = type === "serial" ? [...new Set(stock.rows.map(row => row.partNumber))] : [number];
+            const details = await Promise.all(numbers.map(async partNumber => ({
+                ...(await (partTask || fetchPart(partNumber))),
+                number: partNumber,
+                rows: stock.rows.filter(row => row.partNumber === partNumber)
+            })));
+            if (revision !== requestRevision || !row.isConnected) return;
+            if (timedOut && !stock.rows.length) throw new DOMException("Lookup timed out", "AbortError");
             loadedNumber = number;
-            renderPart(result, part, number, stock.rows, stock.unavailable);
+            result.replaceChildren();
+            if (type === "serial") {
+                const summary = document.createElement("p");
+                summary.className = "serial-match";
+                summary.textContent = `Serial ${number} · ${numbers.length} matching ${numbers.length === 1 ? "part" : "parts"}`;
+                result.append(summary);
+            }
+            for (const detail of details) {
+                const block = document.createElement("div");
+                block.className = "lookup-match";
+                renderPart(block, detail.part, detail.number, detail.rows, stock.unavailable);
+                if (detail.portalUnavailable) {
+                    const note = document.createElement("p");
+                    note.className = "row-status is-error";
+                    note.textContent = detail.rows.length ? "Portal details are unavailable. Showing inventory data; search again to retry." : "Could not load this part. Check your connection and search again.";
+                    block.append(note);
+                }
+                result.append(block);
+            }
         } catch (error) {
             if (revision !== requestRevision || !row.isConnected || (error.name === "AbortError" && !timedOut)) return;
             result.innerHTML = timedOut
@@ -176,8 +232,17 @@ function createRow(initialValue = "", focus = false) {
     input.addEventListener("input", () => {
         cancel();
         input.removeAttribute("aria-invalid");
-        if (normalizePartNumber(input.value) !== loadedNumber) result.innerHTML = '<p class="row-status" role="status">Enter a part number to load its details.</p>';
+        if (normalizePartNumber(input.value) !== loadedNumber) result.innerHTML = `<p class="row-status" role="status">${emptyMessage()}</p>`;
         updateList();
+    });
+    kind.addEventListener("change", () => {
+        cancel();
+        loadedNumber = "";
+        input.placeholder = kind.value === "serial" ? "e.g. M409669" : "e.g. 100009";
+        input.removeAttribute("aria-invalid");
+        result.innerHTML = `<p class="row-status" role="status">${emptyMessage()}</p>`;
+        updateList();
+        input.focus();
     });
     input.addEventListener("change", () => { input.value = normalizePartNumber(input.value); updateList(); });
     row.querySelector("form").addEventListener("submit", event => { event.preventDefault(); search(); });
@@ -217,7 +282,7 @@ async function downloadPdf() {
     const QR = window.QRCode;
     const PDF = window.jspdf?.jsPDF;
     if (!QR || !PDF) throw new Error("The QR PDF tools could not load. Refresh the page and try again.");
-    const url = buildPartsUrl(location.href, values(), orderNumber).href;
+    const url = shareUrl().href;
     const container = document.createElement("div");
     container.className = "visually-hidden";
     document.body.append(container);
@@ -236,7 +301,7 @@ async function downloadPdf() {
         pdf.addImage(canvas.toDataURL("image/png"), "PNG", 126, 104, 360, 360);
         pdf.setFont("helvetica", "normal");
         pdf.setFontSize(12);
-        pdf.text(`${values().length} ${values().length === 1 ? "part" : "parts"}${orderNumber ? ` | Order ${orderNumber}` : ""}`, 306, 500, { align: "center" });
+        pdf.text(`${values().length} ${values().length === 1 ? "lookup" : "lookups"}${orderNumber ? ` | Order ${orderNumber}` : ""}`, 306, 500, { align: "center" });
         pdf.setFontSize(9);
         const lines = pdf.splitTextToSize(url, 480);
         pdf.text(lines, 66, 535);
@@ -265,5 +330,8 @@ document.getElementById("close-image").addEventListener("click", () => dialog.cl
 dialog.addEventListener("click", event => { if (event.target === dialog) dialog.close(); });
 
 const initialParts = (new URL(location.href).searchParams.get("parts") || "").split(",").map(normalizePartNumber).filter(Boolean);
-if (initialParts.length) initialParts.forEach(number => createRow(number).search());
-else createRow();
+const initialSerials = (new URL(location.href).searchParams.get("serials") || "").split(",").map(normalizePartNumber).filter(Boolean);
+if (initialParts.length || initialSerials.length) {
+    initialParts.forEach(number => createRow(number).search());
+    initialSerials.forEach(number => createRow(number, false, "serial").search());
+} else createRow();
