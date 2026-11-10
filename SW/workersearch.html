@@ -6,10 +6,10 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>Parts lookup · Steelwrist</title>
     <link rel="icon" type="image/png" href="media/images/invert%20logo.png?v=20260527-15">
-    <link rel="stylesheet" href="css/workersearch.css?v=20261110-1">
+    <link rel="stylesheet" href="css/workersearch.css?v=20261110-2">
     <script defer src="js/vendor/qrcode.min.js?v=20260527-15"></script>
     <script defer src="js/vendor/jspdf.umd.min.js?v=20260527-15"></script>
-    <script type="module" src="js/workersearch.js?v=20261110-1"></script>
+    <script type="module" src="js/workersearch.js?v=20261110-2"></script>
 </head>
 <body>
     <a class="skip-link" href="#parts-list">Skip to parts</a>
@@ -19,7 +19,7 @@
     </header>
     <main class="page-width">
         <section class="page-intro" aria-labelledby="page-title">
-            <div><h1 id="page-title">Parts lookup</h1><p>Search by part or serial number for details and stock locations.</p></div>
+            <div><h1 id="page-title">Parts lookup</h1><p>Find part details, stock locations, and available serial numbers.</p></div>
             <div class="page-actions">
                 <button id="import-xml" class="button button-secondary" type="button">Import XML</button>
                 <input id="xml-upload" class="visually-hidden" type="file" accept=".xml,application/xml,text/xml" tabindex="-1" aria-label="Import XML file">
@@ -29,11 +29,11 @@
         <p id="page-status" class="page-status" role="status"></p>
         <section aria-labelledby="parts-heading">
             <div class="list-toolbar">
-                <div class="list-title"><h2 id="parts-heading">Lookups</h2><span id="parts-count">1 lookup</span><span id="order-summary" hidden></span></div>
-                <button id="add-part-row" class="button button-secondary" type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add lookup</button>
+                <div class="list-title"><h2 id="parts-heading">Parts</h2><span id="parts-count">1 part</span><span id="order-summary" hidden></span></div>
+                <button id="add-part-row" class="button button-secondary" type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add part</button>
             </div>
             <div id="parts-list" tabindex="-1"></div>
-            <div id="empty-list" class="empty-list" hidden><p>No lookups in this list.</p><button id="empty-add-part" class="button button-secondary" type="button">Add a lookup</button></div>
+            <div id="empty-list" class="empty-list" hidden><p>No parts in this list.</p><button id="empty-add-part" class="button button-secondary" type="button">Add a part</button></div>
         </section>
         <p class="stock-note">Stock comes from the latest uploaded inventory file.</p>
     </main>

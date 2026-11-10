@@ -45,12 +45,6 @@ export function parseStockCsv(csvText) {
     }).filter(row => row.partNumber);
 }
 
-// Serial identifiers remain strings: leading zeroes and letters are significant.
-export function findStockRows(rows, value, type = "part") {
-    const key = type === "serial" ? "serialNumber" : "partNumber";
-    const query = normalizePartNumber(value);
-    return query ? rows.filter(row => normalizePartNumber(row[key]) === query) : [];
-}
 
 function getFirstTextContent(xmlDoc, selectors) {
     for (const selector of selectors) {
@@ -180,13 +174,11 @@ export function stockBalance(rows) {
     }, 0);
 }
 
-export function buildPartsUrl(href, parts, orderNumber = "", serials = []) {
+export function buildPartsUrl(href, parts, orderNumber = "") {
     const source = new URL(href);
     const url = new URL(source.pathname, source.origin);
     const values = parts.map(normalizePartNumber).filter(Boolean);
     if (values.length) url.searchParams.set("parts", values.join(","));
-    const serialValues = serials.map(normalizePartNumber).filter(Boolean);
-    if (serialValues.length) url.searchParams.set("serials", serialValues.join(","));
     if (orderNumber) url.searchParams.set("order", orderNumber);
     return url;
 }
